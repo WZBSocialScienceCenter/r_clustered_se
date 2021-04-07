@@ -79,15 +79,15 @@ m1coeffs_std[coi_indices,]
 
 Unsurprisingly, job tenure and especially union membership are positively associated with wage. (Please note the cautious language here, since we can't make any causal claims with our very simplified approach.) The coefficient of the interaction term shows that union membership also boosts the job tenure effect a bit more, though not significantly.
 
+## Clustered robust standard errors
+
+standard OLS assumptions: errors are normally distributed with constant variance + independence (TODO: check!)
 
 heatmap of excerpt of variance-covariance matrix
 
 ```{r}
 heatmap(vcov(m1)[1:30, 1:30], Rowv = NA, Colv = NA)
 ```
-## Stata
-
-TODO
 
 ## Option 1: *sandwich* and *lmtest*
 
@@ -318,6 +318,9 @@ microbenchmark(bench_lm_sandwich_ci(),
 
 - Stata-type errors seem to be much faster to calculate
 
+## Comparision of results with Stata
+
+TODO
 
 ## Conclusion
 
