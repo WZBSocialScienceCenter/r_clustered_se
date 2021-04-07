@@ -15,7 +15,9 @@ TODO
 
 ## Data
 
-TODO
+We'll work with the dataset *nlswork* that's [included in Stata](https://www.stata-press.com/data/r16/), so we can easily compare the results with Stata. The data comes from the US National Longitudinal Survey (NLS) and contains information about more than 4000 young working women. As for this example, we're interested in the relationship between wage (here as log-scaled GNP-adjusted wage) as dependent variable `ln_wage` and survey participant's current `age`, job `tenure` in years and `union` membership as independent variables. It's a longitudinal survey, so participants were asked repeatedly between 1968 and 1988 and each participant is identified by an unique `idcode`.
+
+To keep the data size limited, we'll only work with a subset of the data (only participants with IDs 1 to 100) and we also simply dismiss any observations that contain missing values. **Please note that this is only an example for illustrative purposes, not a "real" analysis of the NLS data.**
 
 ```{r, warning=FALSE, error=FALSE}
 library(webuse)
@@ -30,30 +32,35 @@ nlswork <- filter(nlswork_orig, idcode <= 100) %>%
          idcode = as.factor(idcode))
 str(nlswork)
 ```
-
+Let's have a look at the first few observations. They contain data from participant #1, who was surveyed several times between 1972 and 1988, and a few observations from participant #2.
 
 ```{r}
-head(nlswork)
+head(nlswork, 10)
 ```
 
 ```{r}
 summary(nlswork)
 ```
 
+We have 82 participants in our subset:
+
 ```{r}
 length(unique(nlswork$idcode))
 ```
-
+The number of times each participant was surveyed ranges from only once to twelve times:
 
 ```{r}
 summary(as.integer(table(nlswork$idcode)))
 ```
+In more than one quarter of the observations, the participant answered to be currently member of a trade union:
 
 ```{r}
 table(nlswork$union)
 ```
 
 ## Fixed-effects model, not adjusting for clustered observations
+
+- important: idcode is factor
 
 ```{r}
 m1 <- lm(ln_wage ~ age + tenure + union + tenure:union + idcode,
