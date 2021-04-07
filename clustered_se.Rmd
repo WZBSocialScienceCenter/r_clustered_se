@@ -15,9 +15,9 @@ TODO
 
 ## Data
 
-We'll work with the dataset *nlswork* that's [included in Stata](https://www.stata-press.com/data/r16/), so we can easily compare the results with Stata. The data comes from the US National Longitudinal Survey (NLS) and contains information about more than 4000 young working women. As for this example, we're interested in the relationship between wage (here as log-scaled GNP-adjusted wage) as dependent variable `ln_wage` and survey participant's current `age`, job `tenure` in years and `union` membership as independent variables. It's a longitudinal survey, so participants were asked repeatedly between 1968 and 1988 and each participant is identified by an unique `idcode`.
+We'll work with the dataset *nlswork* that's [included in Stata](https://www.stata-press.com/data/r16/), so we can easily compare the results with Stata. The data comes from the US National Longitudinal Survey (NLS) and contains information about more than 4000 young working women. As for this example, we're interested in the relationship between wage (here as log-scaled GNP-adjusted wage) as dependent variable `ln_wage` and survey participant's current `age`, job `tenure` in years and `union` membership as independent variables. It's a longitudinal survey, so subjects were asked repeatedly between 1968 and 1988 and each subject is identified by an unique `idcode`.
 
-To keep the data size limited, we'll only work with a subset of the data (only participants with IDs 1 to 100) and we also simply dismiss any observations that contain missing values. **Please note that this is only an example for illustrative purposes, not a "real" analysis of the NLS data.**
+To keep the data size limited, we'll only work with a subset of the data (only subjects with IDs 1 to 100) and we also simply dismiss any observations that contain missing values. **Please note that this is only an example for illustrative purposes on how to apply clustered standard errors in R, not a "real" analysis of the NLS data.**
 
 ```{r, warning=FALSE, error=FALSE}
 library(webuse)
@@ -32,7 +32,7 @@ nlswork <- filter(nlswork_orig, idcode <= 100) %>%
          idcode = as.factor(idcode))
 str(nlswork)
 ```
-Let's have a look at the first few observations. They contain data from participant #1, who was surveyed several times between 1972 and 1988, and a few observations from participant #2.
+Let's have a look at the first few observations. They contain data from subject #1, who was surveyed several times between 1972 and 1988, and a few observations from subject #2.
 
 ```{r}
 head(nlswork, 10)
@@ -42,17 +42,17 @@ head(nlswork, 10)
 summary(nlswork)
 ```
 
-We have 82 participants in our subset:
+We have 82 subjects in our subset:
 
 ```{r}
 length(unique(nlswork$idcode))
 ```
-The number of times each participant was surveyed ranges from only once to twelve times:
+The number of times each subject was surveyed ranges from only once to twelve times:
 
 ```{r}
 summary(as.integer(table(nlswork$idcode)))
 ```
-In more than one quarter of the observations, the participant answered to be currently member of a trade union:
+In more than one quarter of the observations, the subject answered to be currently member of a trade union:
 
 ```{r}
 table(nlswork$union)
@@ -60,20 +60,26 @@ table(nlswork$union)
 
 ## Fixed-effects model, not adjusting for clustered observations
 
-- important: idcode is factor
+Our data contains repeated measures for each subject, so we have panel data in which each subject forms a group or cluster. We can use a fixed-effects (FE) model to account for unobserved subject-specific characteristics. We do so by including the subject's `idcode` in our model formula.  It's important to note that `idcode` is of type factor (we applied `idcode = as.factor(idcode)` when we prepared the data) so that for each factor level (i.e. each subject) a FE coefficient will be estimated that represents the subject-specific mean of our dependent variable.
+
+Let's specify and fit such a model using `lm`. We include job `tenure`, `union` membership and an interaction between both. We also control for `age` and add `idcode` as FE variable.
 
 ```{r}
 m1 <- lm(ln_wage ~ age + tenure + union + tenure:union + idcode,
          data = nlswork)
 summary(m1)
 ```
-Only show coeff. of interest (exclude FE):
+We're not really interested in the subject-specific means, so let's filter them out and only show our coefficients of interest:
 
 ```{r}
 m1coeffs_std <- data.frame(summary(m1)$coefficients)
 coi_indices <- which(!startsWith(row.names(m1coeffs_std), 'idcode'))
 m1coeffs_std[coi_indices,]
 ```
+
+Unsurprisingly, job tenure and especially union membership are positively associated with wage. (Please note the cautious language here, since we can't make any causal claims with our very simplified approach.) The coefficient of the interaction term shows that union membership also boosts the job tenure effect a bit more, though not significantly.
+
+
 heatmap of excerpt of variance-covariance matrix
 
 ```{r}
