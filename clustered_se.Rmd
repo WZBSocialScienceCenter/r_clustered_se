@@ -2,7 +2,9 @@
 title: 'Clustered standard errors with R: Three ways, one result'
 author: "Markus Konrad"
 date: "4/6/2021"
-output: html_document
+output:
+  pdf_document:
+    pandoc_args: ["-Fpandoc-crossref"]
 ---
 
 ```{r setup, include=FALSE}
@@ -79,15 +81,66 @@ m1coeffs_std[coi_indices,]
 
 Unsurprisingly, job tenure and especially union membership are positively associated with wage. (Please note the cautious language here, since we can't make any causal claims with our very simplified approach.) The coefficient of the interaction term shows that union membership also boosts the job tenure effect a bit more, though not significantly.
 
-## Clustered robust standard errors
+## Standard errors
 
-standard OLS assumptions: errors are normally distributed with constant variance + independence (TODO: check!)
+In ordinary least squares (OLS) regression, we assume independently and identically distributed (i.i.d) data (among other assumptions). This is clearly *not* the case here: Each subject may be surveyed several times so within each subject's repeated measures, the data are not independent. So these independent observations come from the clustered structured of our data. Although that is not a problem for our regression estimates (they are still unbiased – [Roberts 2013]), it *is* a problem for for the precision of our estimates -- the precision will typically be overestimated, i.e. the standard errors (SEs) will be lower than they should be [Zeileis, Kröll, Graham 2020]. The intuition behind this for our example is that within our clusters we usually have lower variance since the answers come from the same subject and are correlated with each other. This squeezes our estimates' SEs.
 
-heatmap of excerpt of variance-covariance matrix
+(TODO: also point to heteroscedasticity?)
+
+We can deal with this using clustered standard errors with subjects representing our clusters. But before we do this, let's first have a closer look on how OLS estimates' SEs our actually computed.
+
+In matrix notation, a linear model has the form
+
+$$
+Y = X\beta + e.
+$$
+This model has $p$ parameters (including the intercept parameter $\beta_0$) expressed as $p \times 1$ parameter vector $\beta$ and is estimated from $n$ observations in our data. The dependent variable is $Y$ (an $n \times 1$ vector), the independent variables for an $n \times p$ matrix $X$. Finally, the error term $e$ is an $n \times 1$ vector that captures everything that influences $Y$ but cannot be explained by $X\beta$.
+
+By minimizing $e = Y - X\beta$, an estimation for our parameters, $\hat\beta$, can be found. [Roberts 2013] shows how the covariance matrix $V[\hat\beta]$ can be derived which results in the *sandwich estimator*
+
+$$V[\hat\beta] = (X^TX)^{-1} X^T \boldsymbol\Sigma X (X^TX)^{-1}. \;\;\;\;\; (1)$$
+
+
+This is called sandwich estimator because between two slices of bread $(X^TX)^{-1}$ there is the meat $X^T \boldsymbol\Sigma X$ and this is the most important part for us -- not because we're hungry but because we can see how it relates to the computation of the SEs. One of the classic OLS assumptions is [constant variance (or homoscedasticity)](https://bookdown.org/roback/bookdown-BeyondMLR/ch-MLRreview.html#assumptions-for-linear-least-squares-regression) in the errors across the full spectrum of our dependent variable. This implicates that $\Sigma$ is a diagonal matrix with identical $\hat\sigma^2$ elements. That simplifies the above equation to
+
+$$V[\hat\beta] = \hat\sigma^2 (X^TX)^{-1}. \;\;\;\;\; (2)$$
+
+We're almost finished with calculating the standard errors for a classic OLS model. What's left is the *residual variance* $\hat\sigma^2$. This is calculated as
+
+$$
+\hat\sigma^2 = \frac{RSS}{n-p},\\
+RSS = \sum^n_{i=1} \hat e_i,
+$$
+with $\hat e_i$ being the residuals.
+
+Let's replicate the standard errors from model `m1` with our own calculations. To translate these formulae to R, we use `model.matrix()` to get the design matrix $X$, `nobs()` for number of observations $n$, `ncol(X)` for the number or parameters, `solve()` to calculate the inverse of $X^T X$ and `diag()` to extract the diagonal of square matrix.
 
 ```{r}
-heatmap(vcov(m1)[1:30, 1:30], Rowv = NA, Colv = NA)
+X <- model.matrix(m1)
+sigma2 <- sum(residuals(m1)^2) / (nobs(m1) - ncol(X))
+crossXinv <- solve(t(X) %*% X, diag(ncol(X)))
+m1se <- sqrt(diag(sigma2 * crossXinv))
+m1se
 ```
+Let's check if this is equal to the standard errors calculated by `lm()` (using `near()` because of minor deviations due to floating point precision):
+
+```{r}
+all(near(m1se, m1coeffs_std$Std..Error))
+```
+## Clustered robust standard errors
+
+$V[\hat\beta]$ is called the (variance-)covariance matrix and R has the `vcov()` function to calculate it from a fitted model:
+
+```{r}
+all(near(sigma2 * crossXinv, vcov(m1)))
+```
+
+The square root of the diagonal in the covariance matrix is the SEs of our parameter estimates. Instead of the simplified form for $V[\hat\beta]$ in eq. 2, we can use different estimators for the covariance matrix that are based on the sandwich estimator in eq. 1. The trick with sandwich estimators is that you can exchange the bread and meat of your sandwich according to the structure of your data. This allows you to arrive at consistent SEs even when some of the OLS assumptions like homoscedasticity and independence are violated. This is the "versatile" part in the  Zeileis et al. paper dubbed "Various Versatile Variances".
+
+
+
+
+
 
 ## Option 1: *sandwich* and *lmtest*
 
@@ -207,7 +260,7 @@ summary(m3fe)
 - FE model doesn't work with `margins`:
 
 ```{r}
-margins(m3fe, variables = 'tenure', at = list(union = 0:1)) %>% summary()      # doesn't work
+#margins(m3fe, variables = 'tenure', at = list(union = 0:1)) %>% summary()      # doesn't work
 ```
 - this works:
 
