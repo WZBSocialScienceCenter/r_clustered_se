@@ -1,31 +1,57 @@
 ---
 title: 'Clustered standard errors with R: Three ways, one result'
 author: "Markus Konrad"
-date: "4/6/2021"
+date: "`r Sys.Date()`"
 output:
-  pdf_document:
-    pandoc_args: ["-Fpandoc-crossref"]
+  bookdown::html_document2: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+# output.lines option hack from https://stackoverflow.com/a/23205752
+library(knitr)
+hook_output <- knit_hooks$get("output")
+knit_hooks$set(output = function(x, options) {
+   lines <- options$output.lines
+   if (is.null(lines)) {
+     return(hook_output(x, options))  # pass to default hook
+   }
+   x <- unlist(strsplit(x, "\n"))
+   more <- "..."
+   if (length(lines)==1) {        # first n lines
+     if (length(x) > lines) {
+       # truncate the output, but add ....
+       x <- c(head(x, lines), more)
+     }
+   } else {
+     x <- c(if (abs(lines[1])>1) more else NULL, 
+            x[lines], 
+            if (length(x)>lines[abs(length(lines))]) more else NULL
+           )
+   }
+   # paste these lines together
+   x <- paste(c(x, ""), collapse = "\n")
+   hook_output(x, options)
+ })
 ```
 
-## Introduction
+## Introduction {-}
 
 TODO
 
-## Data
+## Data {-}
 
 We'll work with the dataset *nlswork* that's [included in Stata](https://www.stata-press.com/data/r16/), so we can easily compare the results with Stata. The data comes from the US National Longitudinal Survey (NLS) and contains information about more than 4000 young working women. As for this example, we're interested in the relationship between wage (here as log-scaled GNP-adjusted wage) as dependent variable `ln_wage` and survey participant's current `age`, job `tenure` in years and `union` membership as independent variables. It's a longitudinal survey, so subjects were asked repeatedly between 1968 and 1988 and each subject is identified by an unique `idcode`.
 
 To keep the data size limited, we'll only work with a subset of the data (only subjects with IDs 1 to 100) and we also simply dismiss any observations that contain missing values. **Please note that this is only an example for illustrative purposes on how to apply clustered standard errors in R, not a "real" analysis of the NLS data.**
 
-```{r, warning=FALSE, error=FALSE}
+```{r, warning=FALSE, error=FALSE, message=FALSE}
 library(webuse)
 library(dplyr)
 
-nlswork_orig <- webuse('nlswork')
+#nlswork_orig <- webuse('nlswork')
+nlswork_orig <- readRDS('cache/nlswork.RDS')
 
 nlswork <- filter(nlswork_orig, idcode <= 100) %>%
   select(idcode, year, ln_wage, age, tenure, union) %>%
@@ -60,13 +86,13 @@ In more than one quarter of the observations, the subject answered to be current
 table(nlswork$union)
 ```
 
-## Fixed-effects model, not adjusting for clustered observations
+## Fixed-effects model, not adjusting for clustered observations {-}
 
 Our data contains repeated measures for each subject, so we have panel data in which each subject forms a group or cluster. We can use a fixed-effects (FE) model to account for unobserved subject-specific characteristics. We do so by including the subject's `idcode` in our model formula.  It's important to note that `idcode` is of type factor (we applied `idcode = as.factor(idcode)` when we prepared the data) so that for each factor level (i.e. each subject) a FE coefficient will be estimated that represents the subject-specific mean of our dependent variable.
 
 Let's specify and fit such a model using `lm`. We include job `tenure`, `union` membership and an interaction between both. We also control for `age` and add `idcode` as FE variable.
 
-```{r}
+```{r, output.lines=20}
 m1 <- lm(ln_wage ~ age + tenure + union + tenure:union + idcode,
          data = nlswork)
 summary(m1)
@@ -81,7 +107,7 @@ m1coeffs_std[coi_indices,]
 
 Unsurprisingly, job tenure and especially union membership are positively associated with wage. (Please note the cautious language here, since we can't make any causal claims with our very simplified approach.) The coefficient of the interaction term shows that union membership also boosts the job tenure effect a bit more, though not significantly.
 
-## Standard errors
+## Standard errors {-}
 
 In ordinary least squares (OLS) regression, we assume independently and identically distributed (i.i.d) data (among other assumptions). This is clearly *not* the case here: Each subject may be surveyed several times so within each subject's repeated measures, the data are not independent. So these independent observations come from the clustered structured of our data. Although that is not a problem for our regression estimates (they are still unbiased – [Roberts 2013]), it *is* a problem for for the precision of our estimates -- the precision will typically be overestimated, i.e. the standard errors (SEs) will be lower than they should be [Zeileis, Kröll, Graham 2020]. The intuition behind this for our example is that within our clusters we usually have lower variance since the answers come from the same subject and are correlated with each other. This squeezes our estimates' SEs.
 
@@ -96,26 +122,31 @@ Y = X\beta + e.
 $$
 This model has $p$ parameters (including the intercept parameter $\beta_0$) expressed as $p \times 1$ parameter vector $\beta$ and is estimated from $n$ observations in our data. The dependent variable is $Y$ (an $n \times 1$ vector), the independent variables for an $n \times p$ matrix $X$. Finally, the error term $e$ is an $n \times 1$ vector that captures everything that influences $Y$ but cannot be explained by $X\beta$.
 
-By minimizing $e = Y - X\beta$, an estimation for our parameters, $\hat\beta$, can be found. [Roberts 2013] shows how the covariance matrix $V[\hat\beta]$ can be derived which results in the *sandwich estimator*
+By minimizing $e = Y - X\beta$, an estimation for our parameters, $\hat\beta$, can be found. [Roberts 2013] shows how the variance of the parameter estimates $V[\hat\beta]$ can be derived which results in the *sandwich estimator*
 
-$$V[\hat\beta] = (X^TX)^{-1} X^T \boldsymbol\Sigma X (X^TX)^{-1}. \;\;\;\;\; (1)$$
+\begin{equation} 
+V[\hat\beta] = (X^TX)^{-1} X^T \boldsymbol\Sigma X (X^TX)^{-1}.
+(\#eq:sandwich)
+\end{equation} 
 
 
 This is called sandwich estimator because between two slices of bread $(X^TX)^{-1}$ there is the meat $X^T \boldsymbol\Sigma X$ and this is the most important part for us -- not because we're hungry but because we can see how it relates to the computation of the SEs. One of the classic OLS assumptions is [constant variance (or homoscedasticity)](https://bookdown.org/roback/bookdown-BeyondMLR/ch-MLRreview.html#assumptions-for-linear-least-squares-regression) in the errors across the full spectrum of our dependent variable. This implicates that $\Sigma$ is a diagonal matrix with identical $\hat\sigma^2$ elements. That simplifies the above equation to
 
-$$V[\hat\beta] = \hat\sigma^2 (X^TX)^{-1}. \;\;\;\;\; (2)$$
+\begin{equation} 
+V[\hat\beta] = \hat\sigma^2 (X^TX)^{-1}.
+(\#eq:classicalvar)
+\end{equation} 
 
 We're almost finished with calculating the standard errors for a classic OLS model. What's left is the *residual variance* $\hat\sigma^2$. This is calculated as
 
 $$
-\hat\sigma^2 = \frac{RSS}{n-p},\\
-RSS = \sum^n_{i=1} \hat e_i,
+\hat\sigma^2 = \frac{\sum^n_{i=1} \hat e_i}{n-p},
 $$
-with $\hat e_i$ being the residuals.
+with $\hat e_i$ being the residuals. The numerator is also called the *residual sum of squares* and the denominator is the *degrees of freedom*.
 
 Let's replicate the standard errors from model `m1` with our own calculations. To translate these formulae to R, we use `model.matrix()` to get the design matrix $X$, `nobs()` for number of observations $n$, `ncol(X)` for the number or parameters, `solve()` to calculate the inverse of $X^T X$ and `diag()` to extract the diagonal of square matrix.
 
-```{r}
+```{r, output.lines=3}
 X <- model.matrix(m1)
 sigma2 <- sum(residuals(m1)^2) / (nobs(m1) - ncol(X))
 crossXinv <- solve(t(X) %*% X, diag(ncol(X)))
@@ -127,28 +158,55 @@ Let's check if this is equal to the standard errors calculated by `lm()` (using 
 ```{r}
 all(near(m1se, m1coeffs_std$Std..Error))
 ```
-## Clustered robust standard errors
 
-$V[\hat\beta]$ is called the (variance-)covariance matrix and R has the `vcov()` function to calculate it from a fitted model:
+## Clustered robust standard errors {-}
+
+We took our parameter estimates variance $V[\hat\beta]$ from the diagonal of the *variance-covariance (vcov) matrix*  and R has the `vcov()` function to calculate it from a fitted model. It's exactly what we computed before using eq. 2:
 
 ```{r}
 all(near(sigma2 * crossXinv, vcov(m1)))
 ```
 
-The square root of the diagonal in the covariance matrix is the SEs of our parameter estimates. Instead of the simplified form for $V[\hat\beta]$ in eq. 2, we can use different estimators for the covariance matrix that are based on the sandwich estimator in eq. 1. The trick with sandwich estimators is that you can exchange the bread and meat of your sandwich according to the structure of your data. This allows you to arrive at consistent SEs even when some of the OLS assumptions like homoscedasticity and independence are violated. This is the "versatile" part in the  Zeileis et al. paper dubbed "Various Versatile Variances".
+The square root of the diagonal in the vcov matrix is the SEs of our parameter estimates. Instead of the simplified form in eq. 2, we can use different estimators for the vcov matrix that are based on the sandwich estimator in eq. 1. The trick with sandwich estimators is that you can exchange the bread and meat of your sandwich according to the structure of your data. This allows you to arrive at consistent SEs even when some of the OLS assumptions like homoscedasticity and independence are violated. This is the "versatile" part in the  Zeileis et al. paper dubbed "Various Versatile Variances".
+
+```{r}
+# Empirical Estimating Function diag((Y - X beta)) * X = diag(resid) *  X
+# in R same as: residuals(m1) * X
+Y <- as.matrix(nlswork$ln_wage)
+betahat <- as.matrix(coef(m1))
+u <- diag(as.vector(Y - X %*% betahat)) %*% X    # residuals scale each regressor
+#u <- estfun(m1)
+n_clust <- length(levels(nlswork$idcode))
+
+u_clust <- sapply(1:ncol(X), function(j) {
+  # equivalent to: group_by(data.frame(u = u[,j], idcode = nlswork$idcode), idcode) %>% summarise(sum(u))
+  tapply(u[,j], nlswork$idcode, sum)
+})
+
+meat_clust <- (n_clust / (n_clust-1)) * t(u_clust) %*% u_clust
+```
+
+```{r}
+sqrt(diag(crossXinv %*% meat_clust %*% crossXinv))
+```
+
+
+
+```{r}
+m1res <- residuals(m1)
+
+```
 
 
 
 
-
-
-## Option 1: *sandwich* and *lmtest*
+## Option 1: *sandwich* and *lmtest* {-}
 
 - acts on model from `lm`
 - `vcov` either takes a vcov mat or a function to calculate a vcov mat from `lm` object; here, use `vcovCL` function from sandwich
 - `cluster` takes the variable(s) to cluster on (either as formula or string vector)
 
-```{r, warning=FALSE}
+```{r, warning=FALSE, message=FALSE}
 library(sandwich)
 library(lmtest)
 
@@ -202,7 +260,7 @@ margins(m1, vcov = cl_vcov_mat, variables = 'tenure', at = list(union = 0:1)) %>
 margins(m1, variables = 'tenure', at = list(union = 0:1)) %>% summary()
 ```
 
-## Option 2: `lm.cluster` from *miceadds*
+## Option 2: `lm.cluster` from *miceadds* {-}
 
 - once again a strange package name
 - additional functionality for imputation with *mice* package
@@ -283,7 +341,7 @@ summary(m3stata)
 margins(m3stata, variables = 'tenure', at = list(union = 0:1)) %>% summary()
 ```
 
-## Performance comparison
+## Performance comparison {-}
 
 - performance can be crucial for large datasets
 - baseline: lm and sandwich
@@ -371,11 +429,11 @@ microbenchmark(bench_lm_sandwich_ci(),
 
 - Stata-type errors seem to be much faster to calculate
 
-## Comparision of results with Stata
+## Comparision of results with Stata {-}
 
 TODO
 
-## Conclusion
+## Conclusion {-}
 
 - sandwich+lmtest / lm.cluster: super careful not to forget to pass the vcov mat!
 - better with estimatr: vcov information inside model -> is used correctly by other functions like margins
