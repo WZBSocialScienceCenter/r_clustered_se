@@ -2,6 +2,8 @@
 title: 'Clustered standard errors with R: Three ways, one result'
 author: "Markus Konrad"
 date: "`r Sys.Date()`"
+bibliography: ["bibliography.bib"]
+link-citations: true
 output:
   bookdown::html_document2: default
 ---
@@ -113,7 +115,7 @@ TODO:
 - sections can be skipped
 - not the fastest way!
 
-In ordinary least squares (OLS) regression, we assume independently and identically distributed (i.i.d) data (among other assumptions). This is clearly *not* the case here: Each subject may be surveyed several times so within each subject's repeated measures, the data are not independent. So these independent observations come from the clustered structured of our data. Although that is not a problem for our regression estimates (they are still unbiased – [Roberts 2013]), it *is* a problem for for the precision of our estimates -- the precision will typically be overestimated, i.e. the standard errors (SEs) will be lower than they should be [Zeileis, Kröll, Graham 2020]. The intuition behind this for our example is that within our clusters we usually have lower variance since the answers come from the same subject and are correlated with each other. This squeezes our estimates' SEs.
+In ordinary least squares (OLS) regression, we assume independently and identically distributed (i.i.d) data (among other assumptions). This is clearly *not* the case here: Each subject may be surveyed several times so within each subject's repeated measures, the data are not independent. So these independent observations come from the clustered structured of our data. Although that is not a problem for our regression estimates (they are still unbiased – [@roberts_robust_2013]), it *is* a problem for for the precision of our estimates -- the precision will typically be overestimated, i.e. the standard errors (SEs) will be lower than they should be [@zeileis_various_2020]. The intuition behind this for our example is that within our clusters we usually have lower variance since the answers come from the same subject and are correlated with each other. This squeezes our estimates' SEs.
 
 (TODO: also point to heteroscedasticity?)
 
@@ -126,7 +128,7 @@ Y = X\beta + e.
 $$
 This model has $p$ parameters (including the intercept parameter $\beta_0$) expressed as $p \times 1$ parameter vector $\beta$ and is estimated from $n$ observations in our data. The dependent variable is $Y$ (an $n \times 1$ vector), the independent variables for an $n \times p$ matrix $X$. Finally, the error term $e$ is an $n \times 1$ vector that captures everything that influences $Y$ but cannot be explained by $X\beta$.
 
-By minimizing $e = Y - X\beta$, an estimation for our parameters, $\hat\beta$, can be found. [Roberts 2013] shows how the variance of the parameter estimates $\hat V[\hat\beta]$ can be derived which results in the *sandwich estimator*
+By minimizing $e = Y - X\beta$, an estimation for our parameters, $\hat\beta$, can be found. @roberts_robust_2013 shows how the variance of the parameter estimates $\hat V[\hat\beta]$ can be derived which results in the *sandwich estimator*
 
 \begin{equation} 
 \hat V[\hat\beta] = (X^TX)^{-1} X^T \boldsymbol\Omega X (X^TX)^{-1}.
@@ -174,7 +176,7 @@ We took our parameter estimates variance $V[\hat\beta]$ from the diagonal of the
 all(near(sigma2 * crossXinv, vcov(m1)))
 ```
 
-The square root of the diagonal in the vcov matrix is the SEs of our parameter estimates. Instead of the simplified form in eq. 2, we can use different estimators for the vcov matrix that are based on the sandwich estimator in eq. 1. The trick with sandwich estimators is that you can exchange the bread and meat of your sandwich according to the structure of your data. This allows you to arrive at consistent SEs even when some of the OLS assumptions like homoscedasticity and independence are violated. This is the "versatile" part in the  Zeileis et al. paper dubbed *"Various Versatile Variances."* (TODO: cite) When we want to obtain clustered SEs, we need to consider that $\Omega$ in the "meat" part of eq. 1 is *not* a diagonal matrix with identical $\hat\sigma^2$ elements anymore, hence this can't be simplified to eq. 2. Instead, we can assume that $\Omega$ is block-diagonal with the clusters forming the blocks. This means, we assume that the variance in the errors is constant *within clusters* and so we first calculate $\Omega_j$ per cluster $j$ and then sum the $\Omega_j$. Sonnet 2019 (TODO: cite) shows how $\Omega$ is calculated in detail and also which corrections are applied by Stata. From this article we get the equation
+The square root of the diagonal in the vcov matrix is the SEs of our parameter estimates. Instead of the simplified form in eq. 2, we can use different estimators for the vcov matrix that are based on the sandwich estimator in eq. 1. The trick with sandwich estimators is that you can exchange the bread and meat of your sandwich according to the structure of your data. This allows you to arrive at consistent SEs even when some of the OLS assumptions like homoscedasticity and independence are violated. This is the "versatile" part in the  @zeileis_various_2020 paper dubbed *"Various Versatile Variances."* When we want to obtain clustered SEs, we need to consider that $\Omega$ in the "meat" part of eq. 1 is *not* a diagonal matrix with identical $\hat\sigma^2$ elements anymore, hence this can't be simplified to eq. 2. Instead, we can assume that $\Omega$ is block-diagonal with the clusters forming the blocks. This means, we assume that the variance in the errors is constant *within clusters* and so we first calculate $\Omega_j$ per cluster $j$ and then sum the $\Omega_j$. @sonnet_mathematical_2019 shows how $\Omega$ is calculated in detail and also which corrections are applied by Stata. From this article we get the equation
 
 \begin{equation} 
 \Omega = \frac{n-1}{n-p}\frac{c}{c-1} \sum_{j=1}^c (X_j^T \hat e_j \hat e_j^T X_j),
