@@ -11,7 +11,7 @@
 
 <meta name="author" content="Markus Konrad" />
 
-<meta name="date" content="2021-04-13" />
+<meta name="date" content="2021-04-19" />
 
 <title>Clustered standard errors with R: Three ways, one result</title>
 
@@ -351,7 +351,7 @@ pre code {
 
 <h1 class="title toc-ignore">Clustered standard errors with R: Three ways, one result</h1>
 <h4 class="author">Markus Konrad</h4>
-<h4 class="date">2021-04-13</h4>
+<h4 class="date">2021-04-19</h4>
 
 </div>
 
@@ -479,6 +479,9 @@ m1coeffs_std[coi_indices,]</code></pre>
 </div>
 <div id="standard-errors" class="section level2 unnumbered">
 <h2>Standard errors</h2>
+<p>TODO:
+- sections can be skipped
+- not the fastest way!</p>
 <p>In ordinary least squares (OLS) regression, we assume independently and identically distributed (i.i.d) data (among other assumptions). This is clearly <em>not</em> the case here: Each subject may be surveyed several times so within each subject’s repeated measures, the data are not independent. So these independent observations come from the clustered structured of our data. Although that is not a problem for our regression estimates (they are still unbiased – [Roberts 2013]), it <em>is</em> a problem for for the precision of our estimates – the precision will typically be overestimated, i.e. the standard errors (SEs) will be lower than they should be [Zeileis, Kröll, Graham 2020]. The intuition behind this for our example is that within our clusters we usually have lower variance since the answers come from the same subject and are correlated with each other. This squeezes our estimates’ SEs.</p>
 <p>(TODO: also point to heteroscedasticity?)</p>
 <p>We can deal with this using clustered standard errors with subjects representing our clusters. But before we do this, let’s first have a closer look on how OLS estimates’ SEs our actually computed.</p>
@@ -487,26 +490,28 @@ m1coeffs_std[coi_indices,]</code></pre>
 Y = X\beta + e.
 \]</span>
 This model has <span class="math inline">\(p\)</span> parameters (including the intercept parameter <span class="math inline">\(\beta_0\)</span>) expressed as <span class="math inline">\(p \times 1\)</span> parameter vector <span class="math inline">\(\beta\)</span> and is estimated from <span class="math inline">\(n\)</span> observations in our data. The dependent variable is <span class="math inline">\(Y\)</span> (an <span class="math inline">\(n \times 1\)</span> vector), the independent variables for an <span class="math inline">\(n \times p\)</span> matrix <span class="math inline">\(X\)</span>. Finally, the error term <span class="math inline">\(e\)</span> is an <span class="math inline">\(n \times 1\)</span> vector that captures everything that influences <span class="math inline">\(Y\)</span> but cannot be explained by <span class="math inline">\(X\beta\)</span>.</p>
-<p>By minimizing <span class="math inline">\(e = Y - X\beta\)</span>, an estimation for our parameters, <span class="math inline">\(\hat\beta\)</span>, can be found. [Roberts 2013] shows how the variance of the parameter estimates <span class="math inline">\(V[\hat\beta]\)</span> can be derived which results in the <em>sandwich estimator</em></p>
+<p>By minimizing <span class="math inline">\(e = Y - X\beta\)</span>, an estimation for our parameters, <span class="math inline">\(\hat\beta\)</span>, can be found. [Roberts 2013] shows how the variance of the parameter estimates <span class="math inline">\(\hat V[\hat\beta]\)</span> can be derived which results in the <em>sandwich estimator</em></p>
 <p><span class="math display" id="eq:sandwich">\[\begin{equation} 
-V[\hat\beta] = (X^TX)^{-1} X^T \boldsymbol\Sigma X (X^TX)^{-1}.
+\hat V[\hat\beta] = (X^TX)^{-1} X^T \boldsymbol\Omega X (X^TX)^{-1}.
 \tag{1}
 \end{equation}\]</span></p>
-<p>This is called sandwich estimator because between two slices of bread <span class="math inline">\((X^TX)^{-1}\)</span> there is the meat <span class="math inline">\(X^T \boldsymbol\Sigma X\)</span> and this is the most important part for us – not because we’re hungry but because we can see how it relates to the computation of the SEs. One of the classic OLS assumptions is <a href="https://bookdown.org/roback/bookdown-BeyondMLR/ch-MLRreview.html#assumptions-for-linear-least-squares-regression">constant variance (or homoscedasticity)</a> in the errors across the full spectrum of our dependent variable. This implicates that <span class="math inline">\(\Sigma\)</span> is a diagonal matrix with identical <span class="math inline">\(\hat\sigma^2\)</span> elements. That simplifies the above equation to</p>
+<p>This is called sandwich estimator because between two slices of bread <span class="math inline">\((X^TX)^{-1}\)</span> there is the meat <span class="math inline">\(X^T \boldsymbol\Omega X\)</span> and this is the most important part for us – not because we’re hungry but because we can see how it relates to the computation of the SEs. One of the classic OLS assumptions is <a href="https://bookdown.org/roback/bookdown-BeyondMLR/ch-MLRreview.html#assumptions-for-linear-least-squares-regression">constant variance (or homoscedasticity)</a> in the errors across the full spectrum of our dependent variable. This implicates that <span class="math inline">\(\Omega\)</span> is a diagonal matrix with identical <span class="math inline">\(\hat\sigma^2\)</span> elements. That simplifies the above equation to</p>
 <p><span class="math display" id="eq:classicalvar">\[\begin{equation} 
 V[\hat\beta] = \hat\sigma^2 (X^TX)^{-1}.
 \tag{2}
 \end{equation}\]</span></p>
 <p>We’re almost finished with calculating the standard errors for a classic OLS model. What’s left is the <em>residual variance</em> <span class="math inline">\(\hat\sigma^2\)</span>. This is calculated as</p>
 <p><span class="math display">\[
-\hat\sigma^2 = \frac{RSS}{n-p},\\
-RSS = \sum^n_{i=1} \hat e_i,
+\hat\sigma^2 = \frac{\sum^n_{i=1} \hat e_i}{n-p},
 \]</span>
-with <span class="math inline">\(\hat e_i\)</span> being the residuals.</p>
+with <span class="math inline">\(\hat e_i\)</span> being the residuals. The numerator is also called the <em>residual sum of squares</em> and the denominator is the <em>degrees of freedom</em>.</p>
 <p>Let’s replicate the standard errors from model <code>m1</code> with our own calculations. To translate these formulae to R, we use <code>model.matrix()</code> to get the design matrix <span class="math inline">\(X\)</span>, <code>nobs()</code> for number of observations <span class="math inline">\(n\)</span>, <code>ncol(X)</code> for the number or parameters, <code>solve()</code> to calculate the inverse of <span class="math inline">\(X^T X\)</span> and <code>diag()</code> to extract the diagonal of square matrix.</p>
 <pre class="r"><code>X &lt;- model.matrix(m1)
-sigma2 &lt;- sum(residuals(m1)^2) / (nobs(m1) - ncol(X))
-crossXinv &lt;- solve(t(X) %*% X, diag(ncol(X)))
+u &lt;- residuals(m1)     # \hat e
+n &lt;- nobs(m1)
+p &lt;- ncol(X)
+sigma2 &lt;- sum(u^2) / (n - p)
+crossXinv &lt;- solve(t(X) %*% X, diag(p))
 m1se &lt;- sqrt(diag(sigma2 * crossXinv))
 m1se</code></pre>
 <pre><code>##  [1] 0.131411504 0.003109803 0.006964417 0.060646038 0.128532897 0.132850020
@@ -519,10 +524,55 @@ m1se</code></pre>
 </div>
 <div id="clustered-robust-standard-errors" class="section level2 unnumbered">
 <h2>Clustered robust standard errors</h2>
-<p><span class="math inline">\(V[\hat\beta]\)</span> is called the (variance-)covariance matrix and R has the <code>vcov()</code> function to calculate it from a fitted model:</p>
+<p>We took our parameter estimates variance <span class="math inline">\(V[\hat\beta]\)</span> from the diagonal of the <em>variance-covariance (vcov) matrix</em> and R has the <code>vcov()</code> function to calculate it from a fitted model. It’s exactly what we computed before using eq. 2:</p>
 <pre class="r"><code>all(near(sigma2 * crossXinv, vcov(m1)))</code></pre>
 <pre><code>## [1] TRUE</code></pre>
-<p>The square root of the diagonal in the covariance matrix is the SEs of our parameter estimates. Instead of the simplified form for <span class="math inline">\(V[\hat\beta]\)</span> in eq. 2, we can use different estimators for the covariance matrix that are based on the sandwich estimator in eq. 1. The trick with sandwich estimators is that you can exchange the bread and meat of your sandwich according to the structure of your data. This allows you to arrive at consistent SEs even when some of the OLS assumptions like homoscedasticity and independence are violated. This is the “versatile” part in the Zeileis et al. paper dubbed “Various Versatile Variances”.</p>
+<p>The square root of the diagonal in the vcov matrix is the SEs of our parameter estimates. Instead of the simplified form in eq. 2, we can use different estimators for the vcov matrix that are based on the sandwich estimator in eq. 1. The trick with sandwich estimators is that you can exchange the bread and meat of your sandwich according to the structure of your data. This allows you to arrive at consistent SEs even when some of the OLS assumptions like homoscedasticity and independence are violated. This is the “versatile” part in the Zeileis et al. paper dubbed <em>“Various Versatile Variances.”</em> (TODO: cite) When we want to obtain clustered SEs, we need to consider that <span class="math inline">\(\Omega\)</span> in the “meat” part of eq. 1 is <em>not</em> a diagonal matrix with identical <span class="math inline">\(\hat\sigma^2\)</span> elements anymore, hence this can’t be simplified to eq. 2. Instead, we can assume that <span class="math inline">\(\Omega\)</span> is block-diagonal with the clusters forming the blocks. This means, we assume that the variance in the errors is constant <em>within clusters</em> and so we first calculate <span class="math inline">\(\Omega_j\)</span> per cluster <span class="math inline">\(j\)</span> and then sum the <span class="math inline">\(\Omega_j\)</span>. Sonnet 2019 (TODO: cite) shows how <span class="math inline">\(\Omega\)</span> is calculated in detail and also which corrections are applied by Stata. From this article we get the equation</p>
+<p><span class="math display" id="eq:omegacl">\[\begin{equation} 
+\Omega = \frac{n-1}{n-p}\frac{c}{c-1} \sum_{j=1}^c (X_j^T \hat e_j \hat e_j^T X_j),
+\tag{3}
+\end{equation}\]</span></p>
+<p>where <span class="math inline">\(c\)</span> is the number of clusters.</p>
+<p>Let’s translate this to R. We already have <span class="math inline">\(\hat e\)</span> as <code>u</code> (the residuals) and the design matrix <code>X</code>. We can generate a list of <span class="math inline">\(\Omega_j\)</span>, sum them and multiply the correction factor:</p>
+<pre class="r"><code>omegaj &lt;- lapply(levels(nlswork$idcode), function(idcode) {
+  j &lt;- nlswork$idcode == idcode
+  X_j &lt;- X[j, , drop = FALSE]           # don&#39;t drop dimensions when we have only one obs.
+  t(X_j) %*% tcrossprod(u[j]) %*% X_j   # tcrossprod is outer product x * x^T
+})
+
+n_cl &lt;- length(levels(nlswork$idcode))  # num. clusters
+#                 correction factor          *   sum of omega_j
+omega &lt;- (n-1) / (n - p) * (n_cl / (n_cl-1)) * Reduce(&#39;+&#39;, omegaj)
+# sandwich formula; extract diagonal and take square root to get SEs
+m1clse &lt;- sqrt(diag(crossXinv %*% omega %*% crossXinv))   
+m1clse</code></pre>
+<pre><code>##  [1] 0.157611390 0.006339777 0.011149190 0.101970509 0.020561516 0.085371134
+##  [7] 0.045217648 0.080696916 0.076998894 0.077586665 0.077282396 0.075596923
+## [13] 0.121048674 0.092384493 0.125721970 0.020541338 0.082613716 0.074920103
+## [19] 0.093227938 0.074677689 0.049171754 0.077785362 0.081174846 0.099365805
+## [25] 0.084325730 0.091684772 0.088854385 0.074750627 0.074887273 0.057001836
+## [31] 0.083696844 0.028295522 0.078059836 0.117163740 0.077119289 0.074505142
+## [37] 0.081599952 0.034820934 0.074270196 0.142324438 0.107590090 0.108003964
+## [43] 0.081746977 0.086063210 0.080025891 0.075014679 0.133513671 0.078234045
+## [49] 0.086344376 0.093034575 0.074128131 0.105322545 0.076772581 0.076492264
+## [55] 0.094923414 0.038303903 0.026363980 0.033831953 0.027257104 0.086645746
+## [61] 0.077602409 0.074757009 0.135687907 0.078966252 0.041772446 0.077343358
+## [67] 0.035297425 0.088468329 0.074933402 0.078552173 0.154257842 0.027127868
+## [73] 0.058131273 0.075033413 0.114827904 0.055975417 0.074624913 0.075322797
+## [79] 0.020582628 0.082706012 0.081842758 0.075500350 0.050689734 0.033116055
+## [85] 0.077465020 0.009646023</code></pre>
+<p>We will later check that this matches the estimates calculated with R packages that implement clustered SE estimation. For now let’s compare the classic OLS SEs with the clustered SEs:</p>
+<pre class="r"><code>m1coeffs_with_clse &lt;- cbind(m1coeffs_std, CLSE = m1clse)
+m1coeffs_with_clse[coi_indices,]</code></pre>
+<pre><code>##                 Estimate  Std..Error   t.value     Pr...t..        CLSE
+## (Intercept)  1.882478232 0.131411504 14.325064 8.022367e-36 0.157611390
+## age          0.005630809 0.003109803  1.810664 7.119315e-02 0.006339777
+## tenure       0.020756426 0.006964417  2.980353 3.114742e-03 0.011149190
+## union        0.174619394 0.060646038  2.879321 4.272027e-03 0.101970509
+## tenure:union 0.014974113 0.009548509  1.568215 1.178851e-01 0.009646023</code></pre>
+<p>We can see that, as expected, the clustered SEs are all a bit higher than the classic OLS SEs.</p>
+<hr />
+<p>The above calculations were used to show what’s happening “under the hood” and also how the formulas used for these calculations are motivated. However, doing the above calculations “by hand” is error-prone and slow. It’s better to use well trusted packages for daily work and so next we’ll have a look at some of these packages and how they can be used.</p>
 </div>
 <div id="option-1-sandwich-and-lmtest" class="section level2 unnumbered">
 <h2>Option 1: <em>sandwich</em> and <em>lmtest</em></h2>
@@ -532,14 +582,9 @@ m1se</code></pre>
 <li><code>cluster</code> takes the variable(s) to cluster on (either as formula or string vector)</li>
 </ul>
 <pre class="r"><code>library(sandwich)
-library(lmtest)</code></pre>
-<pre><code>## Loading required package: zoo</code></pre>
-<pre><code>## 
-## Attaching package: &#39;zoo&#39;</code></pre>
-<pre><code>## The following objects are masked from &#39;package:base&#39;:
-## 
-##     as.Date, as.Date.numeric</code></pre>
-<pre class="r"><code>m1coeffs_cl &lt;- coeftest(m1, vcov = vcovCL, cluster = ~idcode)     # , fix = TRUE ?
+library(lmtest)
+
+m1coeffs_cl &lt;- coeftest(m1, vcov = vcovCL, cluster = ~idcode)     # , fix = TRUE ?
 m1coeffs_cl[coi_indices,]</code></pre>
 <pre><code>##                 Estimate  Std. Error    t value     Pr(&gt;|t|)
 ## (Intercept)  1.882478232 0.157611390 11.9437956 3.667970e-27
@@ -1152,17 +1197,17 @@ microbenchmark(bench_lm_sandwich(),
                times = 30)</code></pre>
 <pre><code>## Unit: milliseconds
 ##                 expr       min        lq      mean    median        uq
-##  bench_lm_sandwich() 22.129445 22.902279 25.706052 25.404020 27.185911
-##   bench_lm_cluster() 22.214189 22.797339 25.161849 24.475908 26.964576
-##   bench_lm_robust1() 10.411922 10.617519 11.931372 11.334384 12.959815
-##   bench_lm_robust2()  5.645428  5.938898  6.517047  6.129554  6.943768
-##   bench_lm_robust3()  5.410112  5.563467  6.835500  6.404888  7.520874
+##  bench_lm_sandwich() 21.486349 22.108590 25.056378 25.090305 26.767997
+##   bench_lm_cluster() 20.902933 21.866671 24.591911 23.588138 26.373297
+##   bench_lm_robust1()  9.867631 10.233611 11.395035 10.446087 11.277191
+##   bench_lm_robust2()  5.470163  5.656339  6.444711  5.862006  6.417741
+##   bench_lm_robust3()  5.179649  5.394451  6.093597  5.599038  6.301571
 ##        max neval
-##  34.725148    30
-##  33.404888    30
-##  15.620453    30
-##   9.453598    30
-##  13.907864    30</code></pre>
+##  34.147959    30
+##  32.377974    30
+##  19.142793    30
+##  11.280591    30
+##   9.351969    30</code></pre>
 <ul>
 <li><p>specifying <code>fixed_effects</code> should speed things up, but in this case it doesn’t</p></li>
 <li><p>now with CIs:</p></li>
@@ -1193,14 +1238,14 @@ microbenchmark(bench_lm_sandwich_ci(),
                bench_lm_robust2_ci(),
                times = 30)</code></pre>
 <pre><code>## Unit: milliseconds
-##                    expr       min        lq      mean    median         uq
-##  bench_lm_sandwich_ci() 23.073738 24.710149 26.879330 26.129511  28.146279
-##   bench_lm_robust1_ci() 90.124693 95.130840 99.087989 99.153834 101.676651
-##   bench_lm_robust2_ci()  5.881135  6.199362  6.979317  6.675685   7.302882
-##        max neval
-##   37.91481    30
-##  116.13926    30
-##   11.35578    30</code></pre>
+##                    expr       min        lq      mean    median        uq
+##  bench_lm_sandwich_ci() 22.443386 23.121880 25.689751 25.400933 27.423835
+##   bench_lm_robust1_ci() 89.581911 93.284815 96.004473 94.633128 98.243621
+##   bench_lm_robust2_ci()  5.808632  6.058078  6.910305  6.271222  7.458289
+##         max neval
+##   36.346601    30
+##  105.500461    30
+##    9.551433    30</code></pre>
 <ul>
 <li>Stata-type errors seem to be much faster to calculate</li>
 </ul>
