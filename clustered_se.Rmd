@@ -90,9 +90,9 @@ table(nlswork$union)
 
 ## Fixed-effects model, not adjusting for clustered observations {-}
 
-Our data contains repeated measures for each subject, so we have panel data in which each subject forms a group or cluster. We can use a fixed-effects (FE) model to account for unobserved subject-specific characteristics. We do so by including the subject's `idcode` in our model formula.  It's important to note that `idcode` is of type factor (we applied `idcode = as.factor(idcode)` when we prepared the data) so that for each factor level (i.e. each subject) a FE coefficient will be estimated that represents the subject-specific mean of our dependent variable.
+Our data contains repeated measures for each subject, so we have panel data in which each subject forms a group or cluster. We can use a fixed-effects (FE) model to account for unobserved subject-specific characteristics. We do so by including the subject's `idcode` in our model formula.  It's important to note that `idcode` is of type factor (we applied `idcode = as.factor(idcode)` when we prepared the data) so that for each factor level (i.e. each subject) an FE coefficient will be estimated that represents the subject-specific mean of our dependent variable.
 
-Let's specify and fit such a model using `lm`. We include job `tenure`, `union` membership and an interaction between both. We also control for `age` and add `idcode` as FE variable.
+Let's specify and fit such a model using `lm`. We include job `tenure`, `union` membership and an interaction between both (the latter mainly for illustrative purposes later when we estimate marginal effects). We also control for `age` and add `idcode` as FE variable.
 
 ```{r, output.lines=20}
 m1 <- lm(ln_wage ~ age + tenure + union + tenure:union + idcode,
@@ -107,15 +107,13 @@ coi_indices <- which(!startsWith(row.names(m1coeffs_std), 'idcode'))
 m1coeffs_std[coi_indices,]
 ```
 
-Unsurprisingly, job tenure and especially union membership are positively associated with wage. (Please note the cautious language here, since we can't make any causal claims with our very simplified approach.) The coefficient of the interaction term shows that union membership also boosts the job tenure effect a bit more, though not significantly.
+Unsurprisingly, job tenure and especially union membership are positively associated with wage. (Please note the cautious language here, since we can't make any causal claims with our very simplified approach.) The coefficient of the interaction term shows that with union membership the job tenure effect is even a bit higher, though not significantly.
+
+In the next two sections we'll see how standard errors for our estimates are usually computed and how this fits into a framework called "sandwich estimators." Using this framework, we see how the standard error calculations can be adjusted to give consistent results for clustered data.
 
 ## Standard errors {-}
 
-TODO:
-- sections can be skipped
-- not the fastest way!
-
-In ordinary least squares (OLS) regression, we assume independently and identically distributed (i.i.d) data (among other assumptions). This is clearly *not* the case here: Each subject may be surveyed several times so within each subject's repeated measures, the data are not independent. So these independent observations come from the clustered structured of our data. Although that is not a problem for our regression estimates (they are still unbiased – [@roberts_robust_2013]), it *is* a problem for for the precision of our estimates -- the precision will typically be overestimated, i.e. the standard errors (SEs) will be lower than they should be [@zeileis_various_2020]. The intuition behind this for our example is that within our clusters we usually have lower variance since the answers come from the same subject and are correlated with each other. This squeezes our estimates' SEs.
+In ordinary least squares (OLS) regression, we assume that the regression model errors are independent. This is not the case here: Each subject may be surveyed several times so within each subject's repeated measures, the errors will be correlated. Although that is not a problem for our regression estimates (they are still unbiased – [@roberts_robust_2013]), it *is* a problem for for the precision of our estimates -- the precision will typically be overestimated, i.e. the standard errors (SEs) will be lower than they should be [@zeileis_various_2020, @cameron_practitioners_2013]. The intuition behind this for our example is that within our clusters we usually have lower variance since the answers come from the same subject and are correlated with each other. This squeezes our estimates' SEs.
 
 (TODO: also point to heteroscedasticity?)
 
@@ -168,7 +166,7 @@ Let's check if this is equal to the standard errors calculated by `lm()` (using 
 all(near(m1se, m1coeffs_std$Std..Error))
 ```
 
-## Clustered robust standard errors {-}
+## Clustered standard errors {-}
 
 We took our parameter estimates variance $V[\hat\beta]$ from the diagonal of the *variance-covariance (vcov) matrix*  and R has the `vcov()` function to calculate it from a fitted model. It's exactly what we computed before using eq. 2:
 
@@ -213,6 +211,7 @@ We can see that, as expected, the clustered SEs are all a bit higher than the cl
 
 The above calculations were used to show what's happening "under the hood" and also how the formulas used for these calculations are motivated. However, doing the above calculations "by hand" is error-prone and slow. It's better to use well trusted packages for daily work and so next we'll have a look at some of these packages and how they can be used.
 
+TODO: point to @cameron_practitioners_2013
 
 ## Option 1: *sandwich* and *lmtest* {-}
 
