@@ -44,9 +44,9 @@ TODO
 
 ## Data {-}
 
-We'll work with the dataset *nlswork* that's [included in Stata](https://www.stata-press.com/data/r16/), so we can easily compare the results with Stata. The data comes from the US National Longitudinal Survey (NLS) and contains information about more than 4000 young working women. As for this example, we're interested in the relationship between wage (here as log-scaled GNP-adjusted wage) as dependent variable `ln_wage` and survey participant's current `age`, job `tenure` in years and `union` membership as independent variables. It's a longitudinal survey, so subjects were asked repeatedly between 1968 and 1988 and each subject is identified by an unique `idcode`.
+We'll work with the dataset *nlswork* that's [included in Stata](https://www.stata-press.com/data/r16/), so we can easily compare the results with Stata. The data comes from the US National Longitudinal Survey (NLS) and contains information about more than 4,000 young working women. As for this example, we're interested in the relationship between wage (here as log-scaled GNP-adjusted wage) as dependent variable (DV) `ln_wage` and survey participant's current `age`, job `tenure` in years and `union` membership as independent variables. It's a longitudinal survey, so subjects were asked repeatedly between 1968 and 1988 and each subject is identified by an unique `idcode`.
 
-To keep the data size limited, we'll only work with a subset of the data (only subjects with IDs 1 to 100) and we also simply dismiss any observations that contain missing values. **Please note that this is only an example for illustrative purposes on how to apply clustered standard errors in R, not a "real" analysis of the NLS data.**
+The example data is used for illustrative purposes only and we skip many things that we'd normally do, such as investigating descriptive statistics and exploratory plots. To keep the data size limited, we'll only work with a subset of the data (only subjects with IDs 1 to 100) and we also simply dismiss any observations that contain missing values.
 
 ```{r, warning=FALSE, error=FALSE, message=FALSE}
 library(webuse)
@@ -88,9 +88,37 @@ In more than one quarter of the observations, the subject answered to be current
 table(nlswork$union)
 ```
 
+The following shows the distribution of the DV in our data.
+
+```{r}
+hist(nlswork$ln_wage, breaks = 20, main = 'Histogram of DV', xlab = NA)
+```
+The DV is roughly normally distributed with the following mean and SD:
+
+```{r}
+c(mean(nlswork$ln_wage), sd(nlswork$ln_wage))
+```
+We can calculate the mean and SD of the DV separately for each subject. A histogram of these subject-specific means reveals more variability:
+
+```{r}
+y_mean_sd_cl <- sapply(levels(nlswork$idcode), function(idcode) {
+  y_cl <- nlswork$ln_wage[nlswork$idcode == idcode]
+  c(mean(y_cl), sd(y_cl))
+})
+hist(y_mean_sd_cl[1,], breaks = 20, main = 'Histogram of DV means per subject', xlab = NA)
+```
+
+We can compare the SD of the subject-specific means with the mean of the SDs calculated from each subjects' repeated measures.
+
+```{r}
+c(sd(y_mean_sd_cl[1,]), mean(y_mean_sd_cl[2,], na.rm = TRUE))
+```
+The SD between the subject-specific means is almost twice as large as the mean of the SD from each subjects' values. This shows that there's much more variability between each subject than within each subject's repeated measures.
+
+
 ## Fixed-effects model, not adjusting for clustered observations {-}
 
-Our data contains repeated measures for each subject, so we have panel data in which each subject forms a group or cluster. We can use a fixed-effects (FE) model to account for unobserved subject-specific characteristics. We do so by including the subject's `idcode` in our model formula.  It's important to note that `idcode` is of type factor (we applied `idcode = as.factor(idcode)` when we prepared the data) so that for each factor level (i.e. each subject) an FE coefficient will be estimated that represents the subject-specific mean of our dependent variable.
+Our data contains repeated measures for each subject, so we have panel data in which each subject forms a group or cluster. We can use a fixed-effects (FE) model to account for unobserved subject-specific characteristics. We do so by including the subject's `idcode` in our model formula.  It's important to note that `idcode` is of type factor (we applied `idcode = as.factor(idcode)` when we prepared the data) so that for each factor level (i.e. each subject) an FE coefficient will be estimated that represents the subject-specific mean of our DV. (Please note that it is not always necessary to use an FE model and you can estimate robust SEs from clustered data also without FEs.)
 
 Let's specify and fit such a model using `lm`. We include job `tenure`, `union` membership and an interaction between both (the latter mainly for illustrative purposes later when we estimate marginal effects). We also control for `age` and add `idcode` as FE variable.
 
@@ -99,7 +127,7 @@ m1 <- lm(ln_wage ~ age + tenure + union + tenure:union + idcode,
          data = nlswork)
 summary(m1)
 ```
-We're not really interested in the subject-specific means, so let's filter them out and only show our coefficients of interest:
+We're not really interested in the subject-specific means (the FE coefficients), so let's filter them out and only show our coefficients of interest:
 
 ```{r}
 m1coeffs_std <- data.frame(summary(m1)$coefficients)
@@ -113,20 +141,18 @@ In the next two sections we'll see how standard errors for our estimates are usu
 
 ## Standard errors {-}
 
-In ordinary least squares (OLS) regression, we assume that the regression model errors are independent. This is not the case here: Each subject may be surveyed several times so within each subject's repeated measures, the errors will be correlated. Although that is not a problem for our regression estimates (they are still unbiased – [@roberts_robust_2013]), it *is* a problem for for the precision of our estimates -- the precision will typically be overestimated, i.e. the standard errors (SEs) will be lower than they should be [@zeileis_various_2020, @cameron_practitioners_2013]. The intuition behind this for our example is that within our clusters we usually have lower variance since the answers come from the same subject and are correlated with each other. This squeezes our estimates' SEs.
+In ordinary least squares (OLS) regression, we assume that the regression model errors are independent. This is not the case here: Each subject may be surveyed several times so within each subject's repeated measures, the errors will be correlated. Although that is not a problem for our regression estimates (they are still unbiased – [@roberts_robust_2013]), it *is* a problem for for the precision of our estimates -- the precision will typically be overestimated, i.e. the standard errors (SEs) will be lower than they should be [@zeileis_various_2020, @cameron_practitioners_2013]. The intuition behind this for our example is that within our clusters we usually have lower variance since the answers come from the same subject and are correlated with each other. This lowers our estimates' SEs.
 
-(TODO: also point to heteroscedasticity?)
-
-We can deal with this using clustered standard errors with subjects representing our clusters. But before we do this, let's first have a closer look on how OLS estimates' SEs our actually computed.
+We can deal with this using *clustered standard errors* with subjects representing our clusters. But before we do this, let's first have a closer look on how "classical" OLS estimates' SEs our actually computed.
 
 In matrix notation, a linear model has the form
 
 $$
 Y = X\beta + e.
 $$
-This model has $p$ parameters (including the intercept parameter $\beta_0$) expressed as $p \times 1$ parameter vector $\beta$ and is estimated from $n$ observations in our data. The dependent variable is $Y$ (an $n \times 1$ vector), the independent variables for an $n \times p$ matrix $X$. Finally, the error term $e$ is an $n \times 1$ vector that captures everything that influences $Y$ but cannot be explained by $X\beta$.
+This model has $p$ parameters (including the intercept parameter $\beta_0$) expressed as $p \times 1$ parameter vector $\beta$ and is estimated from $n$ observations in our data. The DV is $Y$ (an $n \times 1$ vector), the independent variables form an $n \times p$ matrix $X$. Finally, the error term $e$ is an $n \times 1$ vector that captures everything that influences $Y$ but cannot be explained by $X\beta$.
 
-By minimizing $e = Y - X\beta$, an estimation for our parameters, $\hat\beta$, can be found. @roberts_robust_2013 shows how the variance of the parameter estimates $\hat V[\hat\beta]$ can be derived which results in the *sandwich estimator*
+By minimizing $e = Y - X\beta$, an estimation for our parameters, $\hat\beta$, can be found. @roberts_robust_2013 shows how the estimated variance of the parameter estimates $\hat V[\hat\beta]$ can be derived which results in the *sandwich estimator*
 
 \begin{equation} 
 \hat V[\hat\beta] = (X^TX)^{-1} X^T \boldsymbol\Omega X (X^TX)^{-1}.
@@ -134,17 +160,17 @@ By minimizing $e = Y - X\beta$, an estimation for our parameters, $\hat\beta$, c
 \end{equation} 
 
 
-This is called sandwich estimator because between two slices of bread $(X^TX)^{-1}$ there is the meat $X^T \boldsymbol\Omega X$ and this is the most important part for us -- not because we're hungry but because we can see how it relates to the computation of the SEs. One of the classic OLS assumptions is [constant variance (or homoscedasticity)](https://bookdown.org/roback/bookdown-BeyondMLR/ch-MLRreview.html#assumptions-for-linear-least-squares-regression) in the errors across the full spectrum of our dependent variable. This implicates that $\Omega$ is a diagonal matrix with identical $\hat\sigma^2$ elements. That simplifies the above equation to
+This is called sandwich estimator because of the structure of the formula: Between two slices of bread $(X^TX)^{-1}$ there is the meat $X^T \boldsymbol\Omega X$ and this is the most important part for us, because we can see how it relates to the computation of the SEs. One of the classic OLS assumptions is [constant variance (or homoscedasticity)](https://bookdown.org/roback/bookdown-BeyondMLR/ch-MLRreview.html#assumptions-for-linear-least-squares-regression) in the errors across the full spectrum of our DV. This implicates that $\Omega$ is a diagonal matrix with identical $\hat\sigma^2$ elements. That simplifies the above equation to
 
 \begin{equation} 
 \hat V[\hat\beta] = \hat\sigma^2 (X^TX)^{-1}.
 (\#eq:classicalvar)
 \end{equation} 
 
-We're almost finished with calculating the standard errors for a classic OLS model. What's left is the *residual variance* $\hat\sigma^2$. This is calculated as
+We're almost finished with estimating the standard errors for a classic OLS model. What's left is the *residual variance* $\hat\sigma^2$. This is calculated as
 
 $$
-\hat\sigma^2 = \frac{\sum^n_{i=1} \hat e_i}{n-p},
+\hat\sigma^2 = \frac{\sum^n_{i=1} \hat e_i^2}{n-p},
 $$
 with $\hat e_i$ being the residuals. The numerator is also called the *residual sum of squares* and the denominator is the *degrees of freedom*.
 
@@ -168,13 +194,13 @@ all(near(m1se, m1coeffs_std$Std..Error))
 
 ## Clustered standard errors {-}
 
-We took our parameter estimates variance $V[\hat\beta]$ from the diagonal of the *variance-covariance (vcov) matrix*  and R has the `vcov()` function to calculate it from a fitted model. It's exactly what we computed before using eq. 2:
+We took our parameter estimates variance $\hat V[\hat\beta]$ from the diagonal of the *variance-covariance (vcov) matrix*  and R has the `vcov()` function to calculate it from a fitted model. It's exactly what we computed before using eq. 2:
 
 ```{r}
 all(near(sigma2 * crossXinv, vcov(m1)))
 ```
 
-The square root of the diagonal in the vcov matrix is the SEs of our parameter estimates. Instead of the simplified form in eq. 2, we can use different estimators for the vcov matrix that are based on the sandwich estimator in eq. 1. The trick with sandwich estimators is that you can exchange the bread and meat of your sandwich according to the structure of your data. This allows you to arrive at consistent SEs even when some of the OLS assumptions like homoscedasticity and independence are violated. This is the "versatile" part in the  @zeileis_various_2020 paper dubbed *"Various Versatile Variances."* When we want to obtain clustered SEs, we need to consider that $\Omega$ in the "meat" part of eq. 1 is *not* a diagonal matrix with identical $\hat\sigma^2$ elements anymore, hence this can't be simplified to eq. 2. Instead, we can assume that $\Omega$ is block-diagonal with the clusters forming the blocks. This means, we assume that the variance in the errors is constant *within clusters* and so we first calculate $\Omega_j$ per cluster $j$ and then sum the $\Omega_j$. @sonnet_mathematical_2019 shows how $\Omega$ is calculated in detail and also which corrections are applied by Stata. From this article we get the equation
+The square root of the diagonal in the vcov matrix is the SEs of our parameter estimates. Instead of the simplified form in eq. 2, we can use different estimators for the vcov matrix that are based on the sandwich estimator in eq. 1. The trick with sandwich estimators is that you can exchange the bread and meat of your sandwich according to the structure of your data. This allows you to arrive at consistent SEs even when some of the OLS assumptions like homoscedasticity are violated. This is the "versatile" part in the  @zeileis_various_2020 paper dubbed *"Various Versatile Variances."* When we want to obtain clustered SEs, we need to consider that $\Omega$ in the "meat" part of eq. 1 is *not* a diagonal matrix with identical $\hat\sigma^2$ elements anymore, hence this can't be simplified to eq. 2. Instead, we can assume that $\Omega$ is block-diagonal with the clusters forming the blocks. This means, we assume that the variance in the errors is constant *within clusters* and so we first calculate $\Omega_j$ per cluster $j$ and then sum the $\Omega_j$. @cameron_practitioners_2013 (p. 11) shows how $\Omega$ is calculated in detail and also which finite-sample correction factor is applied. From this article we get the equation
 
 \begin{equation} 
 \Omega = \frac{n-1}{n-p}\frac{c}{c-1} \sum_{j=1}^c (X_j^T \hat e_j \hat e_j^T X_j),
@@ -197,7 +223,7 @@ n_cl <- length(levels(nlswork$idcode))  # num. clusters
 omega <- (n-1) / (n - p) * (n_cl / (n_cl-1)) * Reduce('+', omegaj)
 # sandwich formula; extract diagonal and take square root to get SEs
 m1clse <- sqrt(diag(crossXinv %*% omega %*% crossXinv))   
-m1clse
+m1clse[1:5]   # only showing the first 5 values here
 ```
 We will later check that this matches the estimates calculated with R packages that implement clustered SE estimation. For now let's compare the classic OLS SEs with the clustered SEs:
 
@@ -209,11 +235,21 @@ We can see that, as expected, the clustered SEs are all a bit higher than the cl
 
 ---
 
-The above calculations were used to show what's happening "under the hood" and also how the formulas used for these calculations are motivated. However, doing the above calculations "by hand" is error-prone and slow. It's better to use well trusted packages for daily work and so next we'll have a look at some of these packages and how they can be used.
-
-TODO: point to @cameron_practitioners_2013
+The above calculations were used to show what's happening "under the hood" and also how the formulas used for these calculations are motivated. However, doing the above calculations "by hand" is error-prone and slow. It's better to use well trusted packages for daily work and so next we'll have a look at some of these packages and how they can be used. Still, it's helpful to understand some background and the limitations for this approach. See @cameron_practitioners_2013 for a much more thorough guide (though only with examples in Stata) that also considers topics like which variable(s) to user for clustering, what to do with low number of clusters or how to implement multi-way clustering.
 
 ## Option 1: *sandwich* and *lmtest* {-}
+
+The [*sandwich* package](https://cran.r-project.org/web/packages/sandwich/index.html) implements several methods for robust covariance estimators, including clustered SEs. Details are explained in the already mentioned paper by @zeileis_various_2020. The accompanying [*lmtest* package](https://cran.r-project.org/web/packages/lmtest/index.html) then provides functions for coefficient tests that take into account the calculated robust covariance estimates.
+
+As explained initially, the parameter estimates from our model are consistent despite the clustered structure of our data. Only the SEs are biased downward and need to be corrected. This is why we can resume to work with our initially estimated model `m1` from `lm()`. There's no need to refit it and sandwich works with lm model objects (and also some other types of models such as some glm models). We only have to adjust how we test our coefficient estimates in the following way:
+
+1. We need to use [`coeftest()`](https://rdrr.io/cran/lmtest/man/coeftest.html) from the lmtest package;
+2. we need to pass either a function to calculate the covariance matrix or an already estimated covariance matrix to the `vcov` parameter;
+3. we need to specify a cluster variable in the `cluster` parameter.
+
+TODO continue here
+
+sandwich provides several vcov func., we use vcovCL ...
 
 - acts on model from `lm`
 - `vcov` either takes a vcov mat or a function to calculate a vcov mat from `lm` object; here, use `vcovCL` function from sandwich
@@ -243,7 +279,6 @@ coefci(m1, parm = coi_indices)
 
 ```{r}
 cl_vcov_mat <- vcovCL(m1, cluster = ~idcode)
-heatmap(cl_vcov_mat[1:30, 1:30], Rowv = NA, Colv = NA)
 ```
 
 - this time we pass the vcov matrix
@@ -325,7 +360,14 @@ m3fe <- lm_robust(ln_wage ~ age + tenure + union + tenure:union,
 summary(m3fe)
 ```
 - results the same as for `m3`
-- 
+- but SEs a bit lower than by sandwich/Stata -> different correction used by default (TODO: explain)
+
+```{r}
+m3fe_df <- tidy(m3fe)
+m3fe_df$std.error.sandwich <-  m1coeffs_cl[coi_indices,2][2:5]
+m3fe_df[c('term', 'estimate', 'std.error', 'std.error.sandwich')]
+```
+
 
 - another good thing: no need to drag along vcov matrix
 - FE model doesn't work with `margins`:
