@@ -93,6 +93,7 @@ The following shows the distribution of the DV in our data.
 ```{r}
 hist(nlswork$ln_wage, breaks = 20, main = 'Histogram of DV', xlab = NA)
 ```
+
 The DV is roughly normally distributed with the following mean and SD:
 
 ```{r}
@@ -113,12 +114,12 @@ We can compare the SD of the subject-specific means with the mean of the SDs cal
 ```{r}
 c(sd(y_mean_sd_cl[1,]), mean(y_mean_sd_cl[2,], na.rm = TRUE))
 ```
-The SD between the subject-specific means is almost twice as large as the mean of the SD from each subjects' values. This shows that there's much more variability between each subject than within each subject's repeated measures.
+The SD between the subject-specific means is almost twice as large as the mean of the SD from each subjects' values. This shows that there's much more variability between each subject than within each subject's repeated measures regarding the DV.
 
 
 ## Fixed-effects model, not adjusting for clustered observations {-}
 
-Our data contains repeated measures for each subject, so we have panel data in which each subject forms a group or cluster. We can use a fixed-effects (FE) model to account for unobserved subject-specific characteristics. We do so by including the subject's `idcode` in our model formula.  It's important to note that `idcode` is of type factor (we applied `idcode = as.factor(idcode)` when we prepared the data) so that for each factor level (i.e. each subject) an FE coefficient will be estimated that represents the subject-specific mean of our DV. (Please note that it is not always necessary to use an FE model and you can estimate robust SEs from clustered data also without FEs.)
+Our data contains repeated measures for each subject, so we have panel data in which each subject forms a group or cluster. We can use a fixed-effects (FE) model to account for unobserved subject-specific characteristics. We do so by including the subject's `idcode` in our model formula.  It's important to note that `idcode` is of type factor (we applied `idcode = as.factor(idcode)` when we prepared the data) so that for each factor level (i.e. each subject) an FE coefficient will be estimated that represents the subject-specific mean of our DV.^[It is not always necessary to use an FE model and you can very well estimate robust SEs from clustered data also without FEs.]
 
 Let's specify and fit such a model using `lm`. We include job `tenure`, `union` membership and an interaction between both (the latter mainly for illustrative purposes later when we estimate marginal effects). We also control for `age` and add `idcode` as FE variable.
 
@@ -135,15 +136,15 @@ coi_indices <- which(!startsWith(row.names(m1coeffs_std), 'idcode'))
 m1coeffs_std[coi_indices,]
 ```
 
-Unsurprisingly, job tenure and especially union membership are positively associated with wage. (Please note the cautious language here, since we can't make any causal claims with our very simplified approach.) The coefficient of the interaction term shows that with union membership the job tenure effect is even a bit higher, though not significantly.
+Unsurprisingly, job tenure and especially union membership are positively associated with wage. The coefficient of the interaction term shows that with union membership the job tenure effect is even a bit higher, though not significantly.
 
-In the next two sections we'll see how standard errors for our estimates are usually computed and how this fits into a framework called "sandwich estimators." Using this framework, we see how the standard error calculations can be adjusted to give consistent results for clustered data.
+In the next two sections we'll see how standard errors for our estimates are usually computed and how this fits into a framework called "sandwich estimators." Using this framework, we'll see how the standard error calculations can be adjusted to give consistent results for clustered data.
 
 ## Standard errors {-}
 
-In ordinary least squares (OLS) regression, we assume that the regression model errors are independent. This is not the case here: Each subject may be surveyed several times so within each subject's repeated measures, the errors will be correlated. Although that is not a problem for our regression estimates (they are still unbiased – [@roberts_robust_2013]), it *is* a problem for for the precision of our estimates -- the precision will typically be overestimated, i.e. the standard errors (SEs) will be lower than they should be [@zeileis_various_2020, @cameron_practitioners_2013]. The intuition behind this for our example is that within our clusters we usually have lower variance since the answers come from the same subject and are correlated with each other. This lowers our estimates' SEs.
+In ordinary least squares (OLS) regression, we assume that the regression model errors are independent. This is not the case here: Each subject may be surveyed several times so within each subject's repeated measures, the errors will be correlated. Although that is not a problem for our regression estimates (they are still unbiased – @roberts_robust_2013), it *is* a problem for for the precision of our estimates -- the precision will typically be overestimated, i.e. the standard errors (SEs) will be lower than they should be [@cameron_practitioners_2013]. The intuition behind this regarding our example is that within our clusters we usually have lower variance since the answers come from the same subject and are correlated. This lowers our estimates' SEs.
 
-We can deal with this using *clustered standard errors* with subjects representing our clusters. But before we do this, let's first have a closer look on how "classical" OLS estimates' SEs our actually computed.
+We can deal with this using *clustered standard errors* with subjects representing our clusters. But before we do this, let's first have a closer look on how "classic" OLS estimates' SEs are actually computed.
 
 In matrix notation, a linear model has the form
 
@@ -174,19 +175,20 @@ $$
 $$
 with $\hat e_i$ being the residuals. The numerator is also called the *residual sum of squares* and the denominator is the *degrees of freedom*.
 
-Let's replicate the standard errors from model `m1` with our own calculations. To translate these formulae to R, we use `model.matrix()` to get the design matrix $X$, `nobs()` for number of observations $n$, `ncol(X)` for the number or parameters, `solve()` to calculate the inverse of $X^T X$ and `diag()` to extract the diagonal of square matrix.
+Let's replicate the standard errors from model `m1` with our own calculations. To translate these formulae to R, we use `model.matrix` to get the design matrix $X$, `residuals` for the residual vector $\hat e$, `nobs` for the number of observations $n$, `ncol(X)` for the number or parameters, `solve` to calculate the inverse of $X^T X$ and `diag` to extract the diagonal of a square matrix.
 
 ```{r, output.lines=3}
 X <- model.matrix(m1)
-u <- residuals(m1)     # \hat e
+u <- residuals(m1)
 n <- nobs(m1)
 p <- ncol(X)
 sigma2 <- sum(u^2) / (n - p)
+# solve (X^T X) A = I, where I is identity matrix -> A is (X^T X)^-1
 crossXinv <- solve(t(X) %*% X, diag(p))
 m1se <- sqrt(diag(sigma2 * crossXinv))
 m1se
 ```
-Let's check if this is equal to the standard errors calculated by `lm()` (using `near()` because of minor deviations due to floating point precision):
+Let's check if this is equal to the standard errors calculated by `lm` (using `near` because of minor deviations due to floating point precision):
 
 ```{r}
 all(near(m1se, m1coeffs_std$Std..Error))
@@ -194,13 +196,13 @@ all(near(m1se, m1coeffs_std$Std..Error))
 
 ## Clustered standard errors {-}
 
-We took our parameter estimates variance $\hat V[\hat\beta]$ from the diagonal of the *variance-covariance (vcov) matrix*  and R has the `vcov()` function to calculate it from a fitted model. It's exactly what we computed before using eq. 2:
+We extracted our parameter estimates' variance $\hat V[\hat\beta]$ from the diagonal of the *(variance-)covariance* or *vcov* matrix and R has the `vcov` function to calculate it from a fitted model. It's exactly what we computed before using eq. 2:
 
 ```{r}
 all(near(sigma2 * crossXinv, vcov(m1)))
 ```
 
-The square root of the diagonal in the vcov matrix is the SEs of our parameter estimates. Instead of the simplified form in eq. 2, we can use different estimators for the vcov matrix that are based on the sandwich estimator in eq. 1. The trick with sandwich estimators is that you can exchange the bread and meat of your sandwich according to the structure of your data. This allows you to arrive at consistent SEs even when some of the OLS assumptions like homoscedasticity are violated. This is the "versatile" part in the  @zeileis_various_2020 paper dubbed *"Various Versatile Variances."* When we want to obtain clustered SEs, we need to consider that $\Omega$ in the "meat" part of eq. 1 is *not* a diagonal matrix with identical $\hat\sigma^2$ elements anymore, hence this can't be simplified to eq. 2. Instead, we can assume that $\Omega$ is block-diagonal with the clusters forming the blocks. This means, we assume that the variance in the errors is constant *within clusters* and so we first calculate $\Omega_j$ per cluster $j$ and then sum the $\Omega_j$. @cameron_practitioners_2013 (p. 11) shows how $\Omega$ is calculated in detail and also which finite-sample correction factor is applied. From this article we get the equation
+The square root of the diagonal in the covariance matrix is the SEs of our parameter estimates. Instead of the simplified form in eq. 2, we can use different estimators for the covariance matrix that are based on the sandwich estimator in eq. 1. The trick with sandwich estimators is that you can exchange the bread and meat of your sandwich according to the structure of your data. This allows you to arrive at consistent SEs even when some of the OLS assumptions like homoscedasticity are violated. This is the "versatile" part in the  @zeileis_various_2020 paper dubbed *"Various Versatile Variances."* When we want to obtain clustered SEs, we need to consider that $\Omega$ in the "meat" part of eq. 1 is *not* a diagonal matrix with identical $\hat\sigma^2$ elements anymore, hence this can't be simplified to eq. 2. Instead, we can assume that $\Omega$ is block-diagonal with the clusters forming the blocks. This means, we assume that the variance in the errors is constant *within clusters* and so we first calculate $\Omega_j$ per cluster $j$ and then sum the $\Omega_j$. @cameron_practitioners_2013 (p. 11) shows how $\Omega$ is calculated in detail and also which finite-sample correction factor is applied. From this article we get the equation
 
 \begin{equation} 
 \Omega = \frac{n-1}{n-p}\frac{c}{c-1} \sum_{j=1}^c (X_j^T \hat e_j \hat e_j^T X_j),
@@ -220,16 +222,16 @@ omegaj <- lapply(levels(nlswork$idcode), function(idcode) {
 
 n_cl <- length(levels(nlswork$idcode))  # num. clusters
 #                 correction factor          *   sum of omega_j
-omega <- (n-1) / (n - p) * (n_cl / (n_cl-1)) * Reduce('+', omegaj)
+omega <- (n-1) / (n-p) * (n_cl / (n_cl-1)) * Reduce('+', omegaj)
 # sandwich formula; extract diagonal and take square root to get SEs
 m1clse <- sqrt(diag(crossXinv %*% omega %*% crossXinv))   
 m1clse[1:5]   # only showing the first 5 values here
 ```
-We will later check that this matches the estimates calculated with R packages that implement clustered SE estimation. For now let's compare the classic OLS SEs with the clustered SEs:
+We will later check that this matches the estimates calculated with R packages that implement clustered SE estimation. For now, let's compare the classic OLS SEs with the clustered SEs:
 
 ```{r}
-m1coeffs_with_clse <- cbind(m1coeffs_std, CLSE = m1clse)
-m1coeffs_with_clse[coi_indices,]
+m1coeffs_with_clse <- cbind(m1coeffs_std, ClustSE = m1clse)
+m1coeffs_with_clse[coi_indices, c(1, 2, 5)]
 ```
 We can see that, as expected, the clustered SEs are all a bit higher than the classic OLS SEs.
 
@@ -239,109 +241,109 @@ The above calculations were used to show what's happening "under the hood" and a
 
 ## Option 1: *sandwich* and *lmtest* {-}
 
-The [*sandwich* package](https://cran.r-project.org/web/packages/sandwich/index.html) implements several methods for robust covariance estimators, including clustered SEs. Details are explained in the already mentioned paper by @zeileis_various_2020. The accompanying [*lmtest* package](https://cran.r-project.org/web/packages/lmtest/index.html) then provides functions for coefficient tests that take into account the calculated robust covariance estimates.
+The [*sandwich* package](https://cran.r-project.org/web/packages/sandwich/index.html) implements several methods for robust covariance estimators, including clustered SEs. Details are explained in the already mentioned paper by @zeileis_various_2020. The accompanying [*lmtest* package](https://cran.r-project.org/web/packages/lmtest/index.html) provides functions for coefficient tests that take into account the calculated robust covariance estimates.
 
-As explained initially, the parameter estimates from our model are consistent despite the clustered structure of our data. Only the SEs are biased downward and need to be corrected. This is why we can resume to work with our initially estimated model `m1` from `lm()`. There's no need to refit it and sandwich works with lm model objects (and also some other types of models such as some glm models). We only have to adjust how we test our coefficient estimates in the following way:
+As explained initially, the parameter estimates from our model are consistent despite the clustered structure of our data. But the SEs are likely biased downward and need to be corrected. This is why we can resume to work with our initially estimated model `m1` from `lm`. There's no need to refit it and sandwich works with lm model objects (and also some other types of models such as some glm models). We only have to adjust how we test our coefficient estimates in the following way:
 
-1. We need to use [`coeftest()`](https://rdrr.io/cran/lmtest/man/coeftest.html) from the lmtest package;
-2. we need to pass either a function to calculate the covariance matrix or an already estimated covariance matrix to the `vcov` parameter;
+1. We need to use [`coeftest`](https://rdrr.io/cran/lmtest/man/coeftest.html) from the lmtest package;
+2. we need to pass it our model and either a function to calculate the covariance matrix or an already estimated covariance matrix to the `vcov` parameter;
 3. we need to specify a cluster variable in the `cluster` parameter.
 
-TODO continue here
-
-sandwich provides several vcov func., we use vcovCL ...
-
-- acts on model from `lm`
-- `vcov` either takes a vcov mat or a function to calculate a vcov mat from `lm` object; here, use `vcovCL` function from sandwich
-- `cluster` takes the variable(s) to cluster on (either as formula or string vector)
+The sandwich package provides several functions for estimating robust covariance matrices. We need [`vcovCL`](https://rdrr.io/rforge/sandwich/man/vcovCL.html) for clustered covariance estimation and will pass this function as `vcov` parameter. Furthermore, we cluster by subject ID, so the cluster variable is `idcode`.
 
 ```{r, warning=FALSE, message=FALSE}
 library(sandwich)
 library(lmtest)
 
-m1coeffs_cl <- coeftest(m1, vcov = vcovCL, cluster = ~idcode)     # , fix = TRUE ?
+m1coeffs_cl <- coeftest(m1, vcov = vcovCL, cluster = ~idcode)
 m1coeffs_cl[coi_indices,]
 ```
+The calculated SE values seem familiar and they are indeed equal to what we calculated before as `m1clse` "by hand":
 
-- calc. 95%-CIs:
+```{r}
+all(near(m1clse, m1coeffs_cl[,2]))
+```
+The lmtest package provides several functions for common post-estimation tasks, for example [`coefci`](https://rdrr.io/cran/lmtest/man/coefci.html) to calculate confidence intervals (CIs). If we use these, we need to make sure to specify the same type of covariance estimation, again by passing the appropriate `vcov` and `cluster` parameters:
 
 ```{r}
 coefci(m1, parm = coi_indices, vcov = vcovCL, cluster = ~idcode)
 ```
-- important to "drag along" the vcov and cluster parameters, otherwise CIs for unadjusted model are calculated
-- here, `tenure` and `union` CIs suddenly do not include zero
+This is really important, as otherwise the classic (non-clustered) covariance estimation is applied by default. This, due to lower SEs, leads to narrower CIs:
 
 ```{r}
-coefci(m1, parm = coi_indices)
+(m1cis <- coefci(m1, parm = coi_indices))
 ```
+Here, the `tenure` and `union` CIs suddenly don't include zero any more!
 
-- we can also first calculate the vcov mat for clustered SEs and then pass this matrix to all further functions that we need
+Instead of passing `vcovCL` as function to the `vcov` parameter, it's more convenient and computationally more efficient to calculate the covariance matrix only once using `vcovCL` and then passing this matrix to functions like `coeftest` and `coefci` instead:
 
 ```{r}
 cl_vcov_mat <- vcovCL(m1, cluster = ~idcode)
 ```
 
-- this time we pass the vcov matrix
-- result is the same
+Now we pass this matrix for the `vcov` parameter. We don't need to specify the `cluster` parameter anymore, since this information was only needed in the previous step.
+
 
 ```{r}
 m1coeffs_cl2 <- coeftest(m1, vcov = cl_vcov_mat)
-m1coeffs_cl2[coi_indices,]
+all(near(m1coeffs_cl[,2], m1coeffs_cl2[,2]))       # same SEs?
 ```
-- same for CIs:
 
 ```{r}
-coefci(m1, parm = coi_indices, vcov = cl_vcov_mat)
+m1cis2 <- coefci(m1, parm = coi_indices, vcov = cl_vcov_mat)
+all(near(m1cis2, m1cis2))       # same CIs?
 ```
+Another example would be to calculate marginal effects, for example with the [*margins*](https://cran.r-project.org/web/packages/margins/index.html) package. Again, to arrive at consistent SEs we will need to pass the  proper covariance matrix via the `vcov` parameter. We do this for the marginal effect of `tenure` at the two levels of `union`:
 
-- calculate marginal effects: pass vcov matrix
-
-```{r, warning=FALSE}
+```{r, warning=FALSE, message=FALSE}
 library(margins)
 
 margins(m1, vcov = cl_vcov_mat, variables = 'tenure', at = list(union = 0:1)) %>% summary()
 ```
 
-- forgetting the vcov matrix:
+Otherwise classic SEs are estimated, which are smaller:
 
 ```{r}
 margins(m1, variables = 'tenure', at = list(union = 0:1)) %>% summary()
 ```
 
+As you can see, the combination of `lm` and the packages sandwich and lmtest are all you need for estimating clustered SEs and inference. However, you really need to be careful to include the covariance matrix at all steps of your calculations.
+
 ## Option 2: `lm.cluster` from *miceadds* {-}
 
-- once again a strange package name
-- additional functionality for imputation with *mice* package
-- happens to contain a function for clustered SE, `lm.cluster`
-- basically does the same as we've done before by using sandwich's `vcovCL` (see source https://github.com/alexanderrobitzsch/miceadds/blob/ca9e54c18e9743280b9a075e6e119fec38693af2/R/lm.cluster.R#L33 and https://github.com/alexanderrobitzsch/miceadds/blob/ca9e54c18e9743280b9a075e6e119fec38693af2/R/lm_cluster_compute_vcov.R#L13)
-- only a bit more convenient maybe
+There's also `lm.cluster` from the package [*miceadds*](https://cran.r-project.org/web/packages/miceadds/index.html)^[Once again a strange package name. Unlike *sandwich* this package name is not derived from a formula, but simply stands for *add*itional functionality for imputation with the *mice* package -- and just happens to include clustered SE estimation.], which may be a bit more convenient to use. Internally, it basically does the same that we've done before by employing sandwich's `vcovCL` (see source code parts [here](https://github.com/alexanderrobitzsch/miceadds/blob/ca9e54c18e9743280b9a075e6e119fec38693af2/R/lm.cluster.R#L33) and [there](https://github.com/alexanderrobitzsch/miceadds/blob/ca9e54c18e9743280b9a075e6e119fec38693af2/R/lm_cluster_compute_vcov.R#L13) for example).
 
-```{r, warning=FALSE}
+Instead of using `lm`, we fit the model with `lm.cluster` and specify a cluster variable (this time as string, not as formula). The model summary then contains the clustered SEs:
+
+```{r results='hide', message=FALSE, warning=FALSE}
 library(miceadds)
 
 m2 <- lm.cluster(ln_wage ~ age + tenure + union + tenure:union + idcode,
                  cluster = 'idcode',
                  data = nlswork)
 m2coeffs <- data.frame(summary(m2))
+```
+
+```{r}
 m2coeffs[!startsWith(row.names(m2coeffs), 'idcode'),]
 ```
 
-- p-value for intercept is different; dunno why
-- returned object from `lm.cluster` is a list that contains the `lm` object as `lmres` and the vcov matrix as `vcov`
-- again, these objects need to be "dragged along"
-- we also need to pass data again via `data = nlswork`
+An object `m` that is returned  from `lm.cluster` is a list that contains the `lm` object as `m$lmres` and the covariance matrix as `m$vcov`. Again, these objects need to be "dragged along" if we want to do further computations. For `margins`, we also need to pass the data again via `data = nlswork`:
 
 ```{r}
 margins(m2$lm_res, vcov = m2$vcov, variables = 'tenure', at = list(union = 0:1), data = nlswork) %>% summary()
 ```
-- the result is consistent with our former computations
+
+The result is consistent with our former computations. The advantage over the "lm + sandwich + lmtest" approach is that you can do clustered SE estimation and inference in one go. For further calculations you still need to be careful to supply the covariance matrix from `m$vcov`.
+
 
 ## Option 3: `lm_robust` from *estimatr* {-}
 
-- reference to DeclareDesign framework
-- https://declaredesign.org/r/estimatr/articles/getting-started.html#lm_robust
+Another option is to use [`lm_robust`](https://declaredesign.org/r/estimatr/articles/getting-started.html#lm_robust) from the [*estimatr*](https://cran.r-project.org/web/packages/estimatr/index.html) package which is part of the [DeclareDesign framework](https://declaredesign.org/) [@blair_declaring_2019]. Like `lm.cluster`, it's more convenient to use, but it doesn't rely on sandwich and lmtest in the background and instead comes with an own implementation for model fitting and covariance estimation. This implementation is [supposed to be faster](https://declaredesign.org/r/estimatr/#fast-to-use) than the other approaches and we'll check that for our example later.
 
-```{r}
+But first, let's fit a model with clustered SEs using `lm_robust`. We use the same formula as with `lm` or `lm.cluster`, but also specify the `clusters` parameter:^[Note that this time we have to use the "bare" unquoted variable name -- not a formula, not a string. Every package has a different policy!]
+
+```{r, output.lines=15}
 library(estimatr)
 
 m3 <- lm_robust(ln_wage ~ age + tenure + union + tenure:union + idcode,
@@ -349,8 +351,7 @@ m3 <- lm_robust(ln_wage ~ age + tenure + union + tenure:union + idcode,
                 data = nlswork)
 summary(m3)
 ```
-- why NAs in F-statistic?
-`- directly set fixed effects variable: nice since it also provides cleaner output and acc. to manual should be faster
+Unlike `lm`, `lm_robust` allows to specify fixed effects in a separate `fixed_effects` formula parameter which, according to the [documentation](https://rdrr.io/cran/estimatr/man/lm_robust.html), should speed up computation for many types of SEs. Furthermore, this cleans up the summary output since there are no more FE coefficients:
 
 ```{r}
 m3fe <- lm_robust(ln_wage ~ age + tenure + union + tenure:union,
@@ -359,52 +360,57 @@ m3fe <- lm_robust(ln_wage ~ age + tenure + union + tenure:union,
                   data = nlswork)
 summary(m3fe)
 ```
-- results the same as for `m3`
-- but SEs a bit lower than by sandwich/Stata -> different correction used by default (TODO: explain)
+When we compare the results from `lm_robust` with `lm`, we can see that the point estimates are the same. The `lm_robust` SEs are, as expected, higher than the "classic" SEs from `lm`. However, the `lm_robust` SEs are also a bit smaller than those calculated from `sandwich::vcovCL`:
 
 ```{r}
-m3fe_df <- tidy(m3fe)
-m3fe_df$std.error.sandwich <-  m1coeffs_cl[coi_indices,2][2:5]
-m3fe_df[c('term', 'estimate', 'std.error', 'std.error.sandwich')]
+m3fe_df <- tidy(m3fe) %>% rename(est.lm_robust = estimate,
+                                 se.lm_robust = std.error)
+m3fe_df$se.sandwich <-  m1coeffs_cl[coi_indices,2][2:5]
+m3fe_df$est.classic <-  m1coeffs_std[coi_indices,1][2:5]
+m3fe_df$se.classic <-  m1coeffs_std[coi_indices,2][2:5]
+m3fe_df[c('term', 'est.classic', 'est.lm_robust', 'se.classic', 'se.lm_robust', 'se.sandwich')]
 ```
 
+This is because `lm_robust` by default uses a different cluster-robust variance estimator *"to correct hypotheses tests for small samples and work with commonly specified fixed effects and weights"* as explained in the [*Getting started* vignette](https://declaredesign.org/r/estimatr/articles/getting-started.html#lm_robust). Details can be found in the [Mathematical notes for estimatr](https://declaredesign.org/r/estimatr/articles/mathematical-notes.html#cluster-robust-variance-and-degrees-of-freedom).
 
-- another good thing: no need to drag along vcov matrix
-- FE model doesn't work with `margins`:
+As with the `lm` and `lm.cluster` results, we can also estimate marginal effects with a `lm_robust` result object. However, this doesn't seem to work when you specify FEs via `fixed_effects` parameter as done for `m3fe`:
 
-```{r}
-#margins(m3fe, variables = 'tenure', at = list(union = 0:1)) %>% summary()      # doesn't work
+```{r eval=FALSE}
+margins(m3fe, variables = 'tenure', at = list(union = 0:1)) %>% summary()      # doesn't work
+# -> Error in predict.lm_robust(model, newdata = data, type = type, se.fit = TRUE, :
+#    Can't set `se.fit` == TRUE with `fixed_effects`
 ```
-- this works:
+
+With `m3` (where FEs were directly specified in the model formula), marginal effects estimation works and we don't even need to pass a separate `vcov` matrix, since this information already comes with the `lm_robust` result object `m3`.^[The standard `vcov` function will return the correct (cluster robust) covariance matrix for a fitted `lm_robust` model, whereas it will return the "classic" covariance matrix for a fitted `lm` model.]
 
 ```{r, warning=FALSE}
 margins(m3, variables = 'tenure', at = list(union = 0:1)) %>% summary()
 ```
-- produces warnings "In sqrt(var_fit) : NaNs produced"
-- SEs smaller than with sandwich
-- uses different SE calculation by default (see math. notes https://declaredesign.org/r/estimatr/articles/mathematical-notes.html#lm_robust-notes)
-- to achieve same result as with sandwich/lmtest use "stata" SEs:
+As already said, `lm_robust` uses a different variance estimator than the one deduced in the beginning of this article, which is used by default in `vcovCL` and in Stata. However, by setting `se_type` to `'stata'` we can replicate these "Stata Clustered SEs":
 
 ```{r}
 m3stata <- lm_robust(ln_wage ~ age + tenure + union + tenure:union + idcode,
                      clusters = idcode,
                      se_type = 'stata',
                      data = nlswork)
-summary(m3stata)
+m3stata_se <- tidy(m3stata) %>% pull(std.error)
+all(near(m3stata_se, m1clse))  # same SEs?
 ```
-```{r, warning=FALSE}
-margins(m3stata, variables = 'tenure', at = list(union = 0:1)) %>% summary()
-```
+In summary, `lm_robust` is as convenient to use as `lm` or `lm.cluster`, but offers similar flexibility as `sandwich` for estimating clustered SEs. A big advantage is that you don't need to care about supplying the right covariance matrix to further post-estimation functions like `margins`. The proper covariance matrix is directy attached to the fitted `lm_robust` object (and can by accessed via `model$vcov` or `vcov(model)` if you need to). Is parameter estimation also faster with `lm_robust`?
 
 ## Performance comparison {-}
 
-- performance can be crucial for large datasets
-- baseline: lm and sandwich
-- `lm.cluster` should have similar performance to lm and sandwich
-- three options for `lm_robust`
-- for fair comparison: don't calc. CIs (which `lm_robust` by default does)
+We'll make a rather superficial performance comparison only using the `nlswork` dataset and [microbenchmark](https://cran.r-project.org/web/packages/microbenchmark/index.html). We will compare the following implementations for estimating model coefficients and clustered SEs:
 
-```{r}
+1. `lm` and `vcovCL` from sandwich
+2. `lm.cluster`
+3. `lm_robust` with default SEs (`se_type = 'CR2'`)
+4. `lm_robust` with Stata SEs (`se_type = 'stata'`)
+5. `lm_robust` with `fixed_effects` parameter and Stata SEs (`fixed_effects = idcode, se_type = 'stata'`)
+
+For a fair comparison, we don't calculate CIs (which `lm_robust` by default does). These are the results for 100 test runs:
+
+```{r echo=FALSE}
 library(microbenchmark)
 
 bench_lm_sandwich <- function() {
@@ -442,55 +448,26 @@ bench_lm_robust3 <- function() {
             data = nlswork)
 }
 
-microbenchmark(bench_lm_sandwich(),
-               bench_lm_cluster(),
-               bench_lm_robust1(),
-               bench_lm_robust2(),
-               bench_lm_robust3(),
-               times = 30)
+(benchres <- microbenchmark(
+  `1. sandw` = bench_lm_sandwich(),
+  `2. clust` = bench_lm_cluster(),
+  `3. rob1` = bench_lm_robust1(),
+  `4. rob2` = bench_lm_robust2(),
+  `5. rob3` = bench_lm_robust3(),
+  times = 100)
+)
 ```
 
-- specifying `fixed_effects` should speed things up, but in this case it doesn't
-
-- now with CIs:
-
-```{r}
-bench_lm_sandwich_ci <- function() {
-  m <- lm(ln_wage ~ age + tenure + union + tenure:union + idcode, data = nlswork)
-  vcovmat <- vcovCL(m, cluster = ~idcode)
-  ci <- coefci(m, cov = vcovmat)
-}
-
-bench_lm_robust1_ci <- function() {
-  lm_robust(ln_wage ~ age + tenure + union + tenure:union + idcode,
-            clusters = idcode,
-            ci = TRUE,
-            data = nlswork)
-}
-
-bench_lm_robust2_ci <- function() {
-  lm_robust(ln_wage ~ age + tenure + union + tenure:union + idcode,
-            clusters = idcode,
-            se_type = 'stata',
-            ci = TRUE,
-            data = nlswork)
-}
-
-microbenchmark(bench_lm_sandwich_ci(),
-               bench_lm_robust1_ci(),
-               bench_lm_robust2_ci(),
-               times = 30)
+```{r echo=FALSE, fig.width=6, fig.height=4}
+boxplot(benchres, unit = 'ms', outline = FALSE, xlab = '', ylab = 'time in ms', main = 'performance comparison')
 ```
 
-- Stata-type errors seem to be much faster to calculate
-
-## Comparision of results with Stata {-}
-
-TODO
+As expected, `lm/sandwich` and `lm.cluster` have similar run times. `lm_robust` is faster for all three configurations (3. to 5.) and is especially fast when estimating Stata SEs (4. and 5.). With our example data, specifying `fixed_effects` (5.) doesn't seem to speed up the calculations.
 
 ## Conclusion {-}
 
-- sandwich+lmtest / lm.cluster: super careful not to forget to pass the vcov mat!
-- better with estimatr: vcov information inside model -> is used correctly by other functions like margins
-- nested clusters: not possible with estimatr (?)
+We've seen that it's important to account for clusters in data when estimating model parameters, since ignoring this fact will likely result in overestimated precision which in turn can lead to wrong inference.  R provides many ways to estimate clustered SEs. The packages `sandwich` and `lmtest` provide a rich set of tools for this task (and also for other types of robust SEs) and work with `lm` and other kinds of models. `lm.cluster` from the miceadds package provides a more convenient wrapper around `sandwich` and `lmtest`. However, users should be careful to not forget to pass along the separate cluster robust covariance matrix for post-estimation tasks. This is something users don't need to care for when using `lm_robust` from the estimatr package, since the covariance matrix is not separate from the fitted model object. Another advantage is that `lm_robust` seems to be faster than the other options.
 
+The source code for this article can be [found on GitHub](https://github.com/WZBSocialScienceCenter/r_clustered_se).
+
+## References {-}
