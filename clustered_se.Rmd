@@ -40,7 +40,11 @@ knit_hooks$set(output = function(x, options) {
 
 ## Introduction {-}
 
-TODO
+The standard error of a regression coefficient is important as it tells us something about the precision of our estimate. This in turn plays an important role in statistical inference. A misleadingly precise estimate leads to overly-narrow confidence intervals, overly-low p-values and possibly wrong conclusions.
+
+In many scenarios, data are structured in groups or clusters, e.g. pupils within classes (within schools), survey respondents within countries or, for longitudinal surveys, survey answers per respondent. Simply ignoring this structure will likely lead to spuriously low standard errors with the already mentioned consequences. For an extreme example, imagine each subject in a survey filled out the same survey twice – since all data is duplicated, your estimates will be much more precise.
+
+Clustered standard errors are a common way to account for clustered data and get consistent precision estimates. Unlike Stata, R doesn't have built-in functionality to estimate clustered standard errors. There are several packages though that add this functionality and this article will introduce three of them, explaining how they can be used and what their advantages and disadvantages are. Before that, I will outline the theory behind (clustered) standard errors for linear regression. The last section is used for a performance comparison between the three presented packages.
 
 ## Data {-}
 
@@ -90,7 +94,7 @@ table(nlswork$union)
 
 The following shows the distribution of the DV in our data.
 
-```{r}
+```{r, fig.width=5, fig.height=3}
 hist(nlswork$ln_wage, breaks = 20, main = 'Histogram of DV', xlab = NA)
 ```
 
@@ -101,7 +105,7 @@ c(mean(nlswork$ln_wage), sd(nlswork$ln_wage))
 ```
 We can calculate the mean and SD of the DV separately for each subject. A histogram of these subject-specific means reveals more variability:
 
-```{r}
+```{r, fig.width=5, fig.height=3}
 y_mean_sd_cl <- sapply(levels(nlswork$idcode), function(idcode) {
   y_cl <- nlswork$ln_wage[nlswork$idcode == idcode]
   c(mean(y_cl), sd(y_cl))
@@ -209,9 +213,9 @@ The square root of the diagonal in the covariance matrix is the SEs of our param
 (\#eq:omegacl)
 \end{equation} 
 
-where $c$ is the number of clusters.
+where $c$ is the number of clusters. It's interesting to see how the residuals are added up *per cluster* and then averaged. As @cameron_practitioners_2013 (p. 13) notes, this implicates an important limitation: With a low number of clusters, this averaging is imprecise.
 
-Let's translate this to R. We already have $\hat e$ as `u` (the residuals) and the design matrix `X`. We can generate a list of $\Omega_j$, sum them and multiply the correction factor:
+Let's translate this formula to R. We already have $\hat e$ as `u` (the residuals) and the design matrix `X`. We can generate a list of $\Omega_j$, sum them and multiply the correction factor:
 
 ```{r}
 omegaj <- lapply(levels(nlswork$idcode), function(idcode) {
@@ -298,7 +302,8 @@ Another example would be to calculate marginal effects, for example with the [*m
 ```{r, warning=FALSE, message=FALSE}
 library(margins)
 
-margins(m1, vcov = cl_vcov_mat, variables = 'tenure', at = list(union = 0:1)) %>% summary()
+margins(m1, vcov = cl_vcov_mat, variables = 'tenure', at = list(union = 0:1)) %>%
+  summary()
 ```
 
 Otherwise classic SEs are estimated, which are smaller:
@@ -331,7 +336,8 @@ m2coeffs[!startsWith(row.names(m2coeffs), 'idcode'),]
 An object `m` that is returned  from `lm.cluster` is a list that contains the `lm` object as `m$lmres` and the covariance matrix as `m$vcov`. Again, these objects need to be "dragged along" if we want to do further computations. For `margins`, we also need to pass the data again via `data = nlswork`:
 
 ```{r}
-margins(m2$lm_res, vcov = m2$vcov, variables = 'tenure', at = list(union = 0:1), data = nlswork) %>% summary()
+margins(m2$lm_res, vcov = m2$vcov, variables = 'tenure', at = list(union = 0:1), data = nlswork) %>%
+  summary()
 ```
 
 The result is consistent with our former computations. The advantage over the "lm + sandwich + lmtest" approach is that you can do clustered SE estimation and inference in one go. For further calculations you still need to be careful to supply the covariance matrix from `m$vcov`.
@@ -376,7 +382,8 @@ This is because `lm_robust` by default uses a different cluster-robust variance 
 As with the `lm` and `lm.cluster` results, we can also estimate marginal effects with a `lm_robust` result object. However, this doesn't seem to work when you specify FEs via `fixed_effects` parameter as done for `m3fe`:
 
 ```{r eval=FALSE}
-margins(m3fe, variables = 'tenure', at = list(union = 0:1)) %>% summary()      # doesn't work
+margins(m3fe, variables = 'tenure', at = list(union = 0:1)) %>%
+  summary()      # doesn't work
 # -> Error in predict.lm_robust(model, newdata = data, type = type, se.fit = TRUE, :
 #    Can't set `se.fit` == TRUE with `fixed_effects`
 ```
