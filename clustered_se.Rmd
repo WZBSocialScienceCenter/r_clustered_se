@@ -241,7 +241,7 @@ We can see that, as expected, the clustered SEs are all a bit higher than the cl
 
 ---
 
-The above calculations were used to show what's happening "under the hood" and also how the formulas used for these calculations are motivated. However, doing the above calculations "by hand" is error-prone and slow. It's better to use well trusted packages for daily work and so next we'll have a look at some of these packages and how they can be used. Still, it's helpful to understand some background and the limitations for this approach. See @cameron_practitioners_2013 for a much more thorough guide (though only with examples in Stata) that also considers topics like which variable(s) to user for clustering, what to do with low number of clusters or how to implement multi-way clustering.
+The above calculations were used to show what's happening "under the hood" and also how the formulas used for these calculations are motivated. However, doing the above calculations "by hand" is error-prone and slow. It's better to use well trusted packages for daily work and so next we'll have a look at some of these packages and how they can be used. Still, it's helpful to understand some background and the limitations for this approach. See @cameron_practitioners_2013 for a much more thorough guide (though only with examples in Stata) that also considers topics like which variable(s) to use for clustering, what to do with low number of clusters or how to implement multi-way clustering.
 
 ## Option 1: *sandwich* and *lmtest* {-}
 
