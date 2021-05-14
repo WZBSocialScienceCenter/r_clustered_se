@@ -140,7 +140,7 @@ m1coeffs_std[coi_indices,]
 
 Unsurprisingly, job tenure and especially union membership are positively associated with wage. The coefficient of the interaction term shows that with union membership the job tenure effect is even a bit higher, though not significantly.
 
-In the next two sections we'll see how standard errors for our estimates are usually computed and how this fits into a framework called "sandwich estimators." Using this framework, we'll see how the standard error calculations can be adjusted to give consistent results for clustered data.
+In the next two sections we'll see how standard errors for our estimates are usually computed and how this fits into a framework called "sandwich estimators." Using this framework, we'll see how the standard error calculations can be adjusted for clustered data.
 
 ## Standard errors {-}
 
@@ -245,13 +245,13 @@ We can see that, as expected, the clustered SEs are all a bit higher than the cl
 
 ---
 
-The above calculations were used to show what's happening "under the hood" and also how the formulas used for these calculations are motivated. However, doing the above calculations "by hand" is error-prone and slow. It's better to use well trusted packages for daily work and so next we'll have a look at some of these packages and how they can be used. Still, it's helpful to understand some background and the limitations for this approach. See @cameron_practitioners_2013 for a much more thorough guide (though only with examples in Stata) that also considers topics like which variable(s) to use for clustering, what to do when dealing with a low number of clusters or how to implement multi-way clustering.
+The above calculations were used to show what's happening "under the hood" and also how the formulas used for these calculations are motivated. However, doing these calculations "by hand" is error-prone and slow. It's better to use well trusted packages for daily work and so next we'll have a look at some of these packages and how they can be used. Still, it's helpful to understand some background and the limitations for this approach. See @cameron_practitioners_2013 for a much more thorough guide (though only with examples in Stata) that also considers topics like which variable(s) to use for clustering, what to do when dealing with a low number of clusters or how to implement multi-way clustering.
 
 ## Option 1: *sandwich* and *lmtest* {-}
 
 The [*sandwich* package](https://cran.r-project.org/web/packages/sandwich/index.html) implements several methods for robust covariance estimators, including clustered SEs. Details are explained in  @zeileis_various_2020. The accompanying [*lmtest* package](https://cran.r-project.org/web/packages/lmtest/index.html) provides functions for coefficient tests that take into account the calculated robust covariance estimates.
 
-As explained initially, the parameter estimates from our model are consistent despite the clustered structure of our data. But the SEs are likely biased downward and need to be corrected. This is why we can resume to work with our initially estimated model `m1` from `lm`. There's no need to refit it and sandwich works with lm model objects (and also some other types of models such as some glm models). We only have to adjust how we test our coefficient estimates in the following way:
+As explained initially, the parameter estimates from our model are fine despite the clustered structure of our data. But the SEs are likely biased downward and need to be corrected. This is why we can resume to work with our initially estimated model `m1` from `lm`. There's no need to refit it and sandwich works with lm model objects (and also some other types of models such as some glm models). We only have to adjust how we test our coefficient estimates in the following way:
 
 1. We need to use [`coeftest`](https://rdrr.io/cran/lmtest/man/coeftest.html) from the lmtest package;
 2. we need to pass it our model and either a function to calculate the covariance matrix or an already estimated covariance matrix to the `vcov` parameter;
@@ -266,21 +266,25 @@ library(lmtest)
 m1coeffs_cl <- coeftest(m1, vcov = vcovCL, cluster = ~idcode)
 m1coeffs_cl[coi_indices,]
 ```
+
 The calculated SE values seem familiar and they are indeed equal to what we calculated before as `m1clse` "by hand":
 
 ```{r}
 all(near(m1clse, m1coeffs_cl[,2]))
 ```
+
 The lmtest package provides several functions for common post-estimation tasks, for example [`coefci`](https://rdrr.io/cran/lmtest/man/coefci.html) to calculate confidence intervals (CIs). If we use these, we need to make sure to specify the same type of covariance estimation, again by passing the appropriate `vcov` and `cluster` parameters:
 
 ```{r}
 coefci(m1, parm = coi_indices, vcov = vcovCL, cluster = ~idcode)
 ```
+
 This is really important, as otherwise the classic (non-clustered) covariance estimation is applied by default. This, due to lower SEs, leads to narrower CIs:
 
 ```{r}
 (m1cis <- coefci(m1, parm = coi_indices))
 ```
+
 Here, the `tenure` and `union` CIs suddenly don't include zero any more!
 
 Instead of passing `vcovCL` as function to the `vcov` parameter, it's more convenient and computationally more efficient to calculate the covariance matrix only once using `vcovCL` and then passing this matrix to functions like `coeftest` and `coefci` instead:
@@ -301,7 +305,7 @@ all(near(m1coeffs_cl[,2], m1coeffs_cl2[,2]))       # same SEs?
 m1cis2 <- coefci(m1, parm = coi_indices, vcov = cl_vcov_mat)
 all(near(m1cis2, m1cis2))       # same CIs?
 ```
-Another example would be to calculate marginal effects, for example with the [*margins*](https://cran.r-project.org/web/packages/margins/index.html) package. Again, to arrive at consistent SEs we will need to pass the  proper covariance matrix via the `vcov` parameter. We do this for the marginal effect of `tenure` at the two levels of `union`:
+Another example would be to calculate marginal effects, for example with the [*margins*](https://cran.r-project.org/web/packages/margins/index.html) package. Again, to arrive at clustered SEs we will need to pass the proper covariance matrix via the `vcov` parameter. We do this for the marginal effect of `tenure` at the two levels of `union`:
 
 ```{r, warning=FALSE, message=FALSE}
 library(margins)
@@ -397,7 +401,8 @@ With `m3` (where FEs were directly specified in the model formula), marginal eff
 ```{r, warning=FALSE}
 margins(m3, variables = 'tenure', at = list(union = 0:1)) %>% summary()
 ```
-As already said, `lm_robust` uses a different variance estimator than the one deduced in the beginning of this article, which is used by default in `vcovCL` and in Stata. However, by setting `se_type` to `'stata'` we can replicate these "Stata Clustered SEs":
+
+As already said, `lm_robust` uses a different variance estimator than sandwich's `vcovCL` and Stata. However, by setting `se_type` to `'stata'` we can replicate these "Stata Clustered SEs":
 
 ```{r}
 m3stata <- lm_robust(ln_wage ~ age + tenure + union + tenure:union + idcode,
