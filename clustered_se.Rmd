@@ -9,7 +9,11 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  dev = 'png',
+  fig.path='figures/'
+)
 
 # output.lines option hack from https://stackoverflow.com/a/23205752
 library(knitr)
@@ -42,7 +46,7 @@ knit_hooks$set(output = function(x, options) {
 
 In many scenarios, data are structured in groups or clusters, e.g. pupils within classes (within schools), survey respondents within countries or, for longitudinal surveys, survey answers per subject Simply ignoring this structure will likely lead to spuriously low standard errors, i.e. a misleadingly precise estimate of our coefficients. This in turn leads to overly-narrow confidence intervals, overly-low p-values and possibly wrong conclusions.
 
-*Clustered standard errors* are a common way to deal with this problem. Unlike Stata, R doesn't have built-in functionality to estimate clustered standard errors. There are several packages though that add this functionality and this article will introduce three of them, explaining how they can be used and what their advantages and disadvantages are. Before that, I will outline the theory behind (clustered) standard errors for linear regression. The last section is used for a performance comparison between the three presented packages. If you're already familiar with the concept of standard errors, you may skip to the [hands-on part](#option-1-sandwich-and-lmtest) right away.
+*Clustered standard errors* are a common way to deal with this problem. Unlike Stata, R doesn't have built-in functionality to estimate clustered standard errors. There are several packages though that add this functionality and this article will introduce three of them, explaining how they can be used and what their advantages and disadvantages are. Before that, I will outline the theory behind (clustered) standard errors for linear regression. The last section is used for a performance comparison between the three presented packages. If you're already familiar with the concept of clustered standard errors, you may skip to the [hands-on part](#option-1-sandwich-and-lmtest) right away.
 
 ## Data {-}
 
@@ -64,6 +68,7 @@ nlswork <- filter(nlswork_orig, idcode <= 100) %>%
          idcode = as.factor(idcode))
 str(nlswork)
 ```
+
 Let's have a look at the first few observations. They contain data from subject #1, who was surveyed several times between 1972 and 1988, and a few observations from subject #2.
 
 ```{r}
@@ -79,11 +84,13 @@ We have 82 subjects in our subset:
 ```{r}
 length(unique(nlswork$idcode))
 ```
+
 The number of times each subject was surveyed ranges from only once to twelve times:
 
 ```{r}
 summary(as.integer(table(nlswork$idcode)))
 ```
+
 In more than one quarter of the observations, the subject answered to be currently member of a trade union:
 
 ```{r}
@@ -92,7 +99,7 @@ table(nlswork$union)
 
 The following shows the distribution of the DV in our data.
 
-```{r, fig.width=5, fig.height=3}
+```{r 01dvdist, fig.width=5, fig.height=3}
 hist(nlswork$ln_wage, breaks = 20, main = 'Histogram of DV', xlab = NA)
 ```
 
@@ -103,7 +110,7 @@ c(mean(nlswork$ln_wage), sd(nlswork$ln_wage))
 ```
 We can calculate the mean and SD of the DV separately for each subject. A histogram of these subject-specific means reveals more variability:
 
-```{r, fig.width=5, fig.height=3}
+```{r 02dvdist_subj, fig.width=5, fig.height=3}
 y_mean_sd_cl <- sapply(levels(nlswork$idcode), function(idcode) {
   y_cl <- nlswork$ln_wage[nlswork$idcode == idcode]
   c(mean(y_cl), sd(y_cl))
@@ -214,7 +221,7 @@ When we want to obtain clustered SEs, we need to consider that $\Omega$ in the "
 \begin{equation} 
 \Omega = \frac{n-1}{n-p}\frac{c}{c-1} \sum_{j=1}^c (X_j^T \hat e_j \hat e_j^T X_j),
 (\#eq:omegacl)
-\end{equation} 
+\end{equation}
 
 where $c$ is the number of clusters. It's interesting to see how the residuals are added up *per cluster* and then averaged. As @cameron_practitioners_2013 (p. 13) notes, this implicates an important limitation: With a low number of clusters, this averaging is imprecise.
 
@@ -276,13 +283,13 @@ all(near(m1clse, m1coeffs_cl[,2]))
 The lmtest package provides several functions for common post-estimation tasks, for example [`coefci`](https://rdrr.io/cran/lmtest/man/coefci.html) to calculate confidence intervals (CIs). If we use these, we need to make sure to specify the same type of covariance estimation, again by passing the appropriate `vcov` and `cluster` parameters:
 
 ```{r}
-coefci(m1, parm = coi_indices, vcov = vcovCL, cluster = ~idcode)
+(m1cis <- coefci(m1, parm = coi_indices, vcov = vcovCL, cluster = ~idcode))
 ```
 
 This is really important, as otherwise the classic (non-clustered) covariance estimation is applied by default. This, due to lower SEs, leads to narrower CIs:
 
 ```{r}
-(m1cis <- coefci(m1, parm = coi_indices))
+coefci(m1, parm = coi_indices)
 ```
 
 Here, the `tenure` and `union` CIs suddenly don't include zero any more!
@@ -303,7 +310,7 @@ all(near(m1coeffs_cl[,2], m1coeffs_cl2[,2]))       # same SEs?
 
 ```{r}
 m1cis2 <- coefci(m1, parm = coi_indices, vcov = cl_vcov_mat)
-all(near(m1cis2, m1cis2))       # same CIs?
+all(near(m1cis, m1cis2))       # same CIs?
 ```
 Another example would be to calculate marginal effects, for example with the [*margins*](https://cran.r-project.org/web/packages/margins/index.html) package. Again, to arrive at clustered SEs we will need to pass the proper covariance matrix via the `vcov` parameter. We do this for the marginal effect of `tenure` at the two levels of `union`:
 
@@ -474,7 +481,7 @@ bench_lm_robust3 <- function() {
 )
 ```
 
-```{r echo=FALSE, fig.width=6, fig.height=4}
+```{r 03perf, echo=FALSE, fig.width=6, fig.height=4}
 boxplot(benchres, unit = 'ms', outline = FALSE, xlab = '', ylab = 'time in ms', main = 'performance comparison')
 ```
 
