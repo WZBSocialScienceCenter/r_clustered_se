@@ -1,6 +1,6 @@
 # Code for "Clustered standard errors with R"
 
-Markus Konrad <markus.konrad@wzb.eu>, Mai 2021
+Markus Konrad <markus.konrad@wzb.eu>, May 2021
 
 Code for the following blog post: https://datascience.blog.wzb.eu/2021/05/18/clustered-standard-errors-with-r/
 
