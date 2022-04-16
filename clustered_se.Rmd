@@ -162,7 +162,7 @@ Y = X\beta + e.
 $$
 This model has $p$ parameters (including the intercept parameter $\beta_0$) expressed as $p \times 1$ parameter vector $\beta$. The parameters will be estimated from $n$ observations in our data. The DV is $Y$ (an $n \times 1$ vector), the independent variables form an $n \times p$ matrix $X$. Finally, the error term $e$ is an $n \times 1$ vector that captures everything that influences $Y$ but cannot be explained by $X\beta$. In classic OLS, we assume that $e$ has a mean of zero and a variance of $\sigma^2$.
 
-By minimizing $e = Y - X\beta$ an estimation for our parameters, $\hat\beta$, can be found as $\hat\beta = (X^TX)^{-1}Y$. The estimated variance $\hat V[\hat\beta]$ for these parameters is then
+By minimizing $\|e\|^2 = \|Y - X\beta\|^2$ an estimation for our parameters, $\hat\beta$, can be found as $\hat\beta = (X^TX)^{-1}X^TY$. The estimated variance $\hat V[\hat\beta]$ for these parameters is then
 
 \begin{equation} 
 \hat V[\hat\beta] = \hat\sigma^2 (X^TX)^{-1},
